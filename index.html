@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Ecos de Rucoy: Tales of Formiga</title>
+    <title>Lunaris Odyssey</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js"></script>
@@ -20,8 +20,12 @@
         .rarity-common { border-color: #9ca3af !important; }
         .rarity-uncommon { border-color: #22c55e !important; }
         .rarity-rare { border-color: #3b82f6 !important; }
-        .rarity-epic { border-color: #a855f7 !important; }
-        .rarity-legendary { border-color: #f59e0b !important; box-shadow: 0 0 8px rgba(245,158,11,0.3); }
+        .rarity-epic { border-color: #a855f7 !important; box-shadow: 0 0 6px rgba(168,85,247,0.25); }
+        .rarity-legendary { border-color: #f59e0b !important; box-shadow: 0 0 12px rgba(245,158,11,0.55), inset 0 0 8px rgba(245,158,11,0.2); animation: legendPulse 2.4s infinite ease-in-out; }
+        @keyframes legendPulse { 0%,100% { box-shadow: 0 0 8px rgba(245,158,11,0.45), inset 0 0 5px rgba(245,158,11,0.15); } 50% { box-shadow: 0 0 18px rgba(245,158,11,0.85), inset 0 0 12px rgba(245,158,11,0.3); } }
+        .item-sprite { width: 100%; height: 100%; image-rendering: pixelated; pointer-events: none; }
+        .sprite-wrap { display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+        .slot-icon { display:flex; align-items:center; justify-content:center; width:100%; height:60%; }
     </style>
 </head>
 <body class="relative w-screen h-screen">
@@ -30,8 +34,8 @@
     <!-- TELA DE LOGIN -->
     <div id="character-menu" class="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-950/95 p-4 overflow-y-auto">
         <div class="max-w-md w-full bg-slate-900 border-2 border-amber-500 rounded-xl p-6 shadow-2xl text-center space-y-6">
-            <h1 class="text-3xl font-extrabold text-amber-500 tracking-wider uppercase animate-pulse">Ecos de Rucoy</h1>
-            <p class="text-xs text-slate-400">Selecione ou Crie até 3 personagens para desbravar Formiga!</p>
+            <h1 class="text-3xl font-extrabold text-amber-500 tracking-wider uppercase animate-pulse">Lunaris Odyssey</h1>
+            <p class="text-xs text-slate-400">Selecione ou Crie até 3 personagens para desbravar Lunaris!</p>
             <div id="char-slots-container" class="space-y-3"></div>
             <div id="creation-form" class="hidden border-t border-slate-700 pt-4 space-y-4">
                 <h3 class="text-lg font-bold text-amber-400">Criar Novo Herói</h3>
@@ -176,7 +180,7 @@
     <div id="shop-modal" class="hidden absolute inset-0 z-40 bg-black/60 flex items-center justify-center p-4 pointer-events-auto">
         <div class="w-full max-w-sm bg-slate-900 border-2 border-amber-500 rounded-xl flex flex-col h-2/3 shadow-2xl">
             <div class="p-3 border-b border-slate-800 flex justify-between items-center">
-                <span class="font-bold text-amber-400 text-sm">Mercador de Formiga</span>
+                <span class="font-bold text-amber-400 text-sm">Mercador de Lunaris</span>
                 <span id="shop-kp" class="text-xs text-yellow-400 font-bold">💰 0 KP</span>
                 <button onclick="toggleShop()" class="text-slate-400 hover:text-white font-bold px-2">X</button>
             </div>
@@ -197,7 +201,7 @@
     </div>
 
 <script>
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'rucoy-tales-formiga';
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'lunaris-odyssey';
 let db, auth;
 let currentFirebaseUser = null;
 let savedCharacters = [];
@@ -221,96 +225,572 @@ const MAP_HEIGHT = 45;
 const DIR = { E: 0, SE: 1, S: 2, SW: 3, W: 4, NW: 5, N: 6, NE: 7 };
 const STATE = { IDLE: 0, WALK: 1, HIT: 3, DEATH: 4 };
 const MAX_LEVEL = 350;
+const LEVEL_DIFF_THRESHOLD = 5; // Diferença de nível para imunidade
 
 // ===== BANCO DE DADOS DE ITENS =====
 const ITEM_RARITY = { COMMON: 'common', UNCOMMON: 'uncommon', RARE: 'rare', EPIC: 'epic', LEGENDARY: 'legendary' };
 
 const WEAPONS_DATABASE = [
-    // GUERREIRO - 10 armas
-    { id: "sw_wood", name: "Espada de Madeira", class: "warrior", val: 2, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🪵", hpBonus: 0 },
-    { id: "sw_bronze", name: "Espada de Bronze", class: "warrior", val: 8, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🗡️", hpBonus: 5 },
-    { id: "sw_iron", name: "Gládio de Ferro", class: "warrior", val: 18, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "⚔️", hpBonus: 10 },
-    { id: "sw_steel", name: "Espada de Aço", class: "warrior", val: 32, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🗡️", hpBonus: 15 },
-    { id: "sw_claymore", name: "Mandoble de Aço", class: "warrior", val: 55, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "⚔️", hpBonus: 25 },
-    { id: "sw_flame", name: "Espada Flamejante", class: "warrior", val: 85, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "🔥", hpBonus: 40 },
-    { id: "sw_crystal", name: "Claymore de Cristal", class: "warrior", val: 120, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "💎", hpBonus: 60 },
-    { id: "sw_vamp", name: "Lâmina do Vampiro", class: "warrior", val: 165, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🧛", hpBonus: 80 },
-    { id: "sw_dragon", name: "Espada do Dragão", class: "warrior", val: 220, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🐉", hpBonus: 120 },
-    { id: "sw_excalibur", name: "Excalibur de Formiga", class: "warrior", val: 300, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "👑", hpBonus: 180 },
+    // GUERREIRO - 10 armas (BUFF TANK: maior dano e mais HP por espada)
+    { id: "sw_wood", type: "weapon", name: "Espada de Madeira", class: "warrior", val: 4, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🪵", hpBonus: 6 },
+    { id: "sw_bronze", type: "weapon", name: "Espada de Bronze", class: "warrior", val: 16, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🗡️", hpBonus: 20 },
+    { id: "sw_iron", type: "weapon", name: "Gládio de Ferro", class: "warrior", val: 36, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "⚔️", hpBonus: 45 },
+    { id: "sw_steel", type: "weapon", name: "Espada de Aço", class: "warrior", val: 64, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🗡️", hpBonus: 75 },
+    { id: "sw_claymore", type: "weapon", name: "Mandoble de Aço", class: "warrior", val: 105, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "⚔️", hpBonus: 120 },
+    { id: "sw_flame", type: "weapon", name: "Espada Flamejante", class: "warrior", val: 160, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "🔥", hpBonus: 180 },
+    { id: "sw_crystal", type: "weapon", name: "Claymore de Cristal", class: "warrior", val: 220, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "💎", hpBonus: 260 },
+    { id: "sw_vamp", type: "weapon", name: "Lâmina do Vampiro", class: "warrior", val: 295, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🧛", hpBonus: 340 },
+    { id: "sw_dragon", type: "weapon", name: "Espada do Dragão", class: "warrior", val: 390, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🐉", hpBonus: 480 },
+    { id: "sw_excalibur", type: "weapon", name: "Excalibur de Lunaris", class: "warrior", val: 520, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "👑", hpBonus: 700 },
 
-    // ARQUEIRO - 10 armas
-    { id: "bw_branch", name: "Arco de Galho", class: "archer", val: 2, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🌿", hpBonus: 0 },
-    { id: "bw_short", name: "Arco Curto de Madeira", class: "archer", val: 7, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🏹", hpBonus: 3 },
-    { id: "bw_long", name: "Arco Longo Reforçado", class: "archer", val: 16, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🏹", hpBonus: 8 },
-    { id: "bw_hunt", name: "Arco de Caça Élfico", class: "archer", val: 30, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🧝", hpBonus: 12 },
-    { id: "bw_elite", name: "Arco de Elite Élfico", class: "archer", val: 50, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "🏹", hpBonus: 20 },
-    { id: "bw_ice", name: "Arco de Gelo Eterno", class: "archer", val: 78, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "❄️", hpBonus: 35 },
-    { id: "bw_wind", name: "Arco de Vento Cortante", class: "archer", val: 110, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "💨", hpBonus: 50 },
-    { id: "bw_dark", name: "Arco Sombrio", class: "archer", val: 150, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🌑", hpBonus: 70 },
-    { id: "bw_void", name: "Arco Estelar do Vazio", class: "archer", val: 200, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🌌", hpBonus: 100 },
-    { id: "bw_chaos", name: "Arco do Caos Primordial", class: "archer", val: 280, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "☄️", hpBonus: 150 },
+    // ARQUEIRO - 10 armas (cada uma com sprite único procedural)
+    { id: "bw_branch", type: "weapon", name: "Arco de Galho", class: "archer", val: 2, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🌿", hpBonus: 0 },
+    { id: "bw_short", type: "weapon", name: "Arco Curto de Madeira", class: "archer", val: 7, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🏹", hpBonus: 3 },
+    { id: "bw_long", type: "weapon", name: "Arco Longo Reforçado", class: "archer", val: 16, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🏹", hpBonus: 8 },
+    { id: "bw_hunt", type: "weapon", name: "Arco de Caça Élfico", class: "archer", val: 30, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🧝", hpBonus: 12 },
+    { id: "bw_elite", type: "weapon", name: "Arco de Elite Élfico", class: "archer", val: 50, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "🏹", hpBonus: 20 },
+    { id: "bw_ice", type: "weapon", name: "Arco de Gelo Eterno", class: "archer", val: 78, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "❄️", hpBonus: 35 },
+    { id: "bw_wind", type: "weapon", name: "Arco de Vento Cortante", class: "archer", val: 110, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "💨", hpBonus: 50 },
+    { id: "bw_dark", type: "weapon", name: "Arco Sombrio", class: "archer", val: 150, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🌑", hpBonus: 70 },
+    { id: "bw_void", type: "weapon", name: "Arco Estelar do Vazio", class: "archer", val: 200, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🌌", hpBonus: 100 },
+    { id: "bw_chaos", type: "weapon", name: "Arco do Caos Primordial", class: "archer", val: 280, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "☄️", hpBonus: 150 },
 
-    // MAGO - 10 armas
-    { id: "st_wood", name: "Cajado de Madeira", class: "mage", val: 3, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🪵", hpBonus: 0 },
-    { id: "st_simple", name: "Cajado Simples", class: "mage", val: 9, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🔮", hpBonus: 5 },
-    { id: "st_apprentice", name: "Cajado do Aprendiz", class: "mage", val: 20, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🔮", hpBonus: 10 },
-    { id: "st_crystal", name: "Varinha de Cristal", class: "mage", val: 35, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "💎", hpBonus: 18 },
-    { id: "st_elemental", name: "Cetro do Elemental", class: "mage", val: 58, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "🔮", hpBonus: 30 },
-    { id: "st_inferno", name: "Cetro de Fogo Infernal", class: "mage", val: 90, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "🔥", hpBonus: 45 },
-    { id: "st_deepice", name: "Cetro de Gelo Profundo", class: "mage", val: 125, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "❄️", hpBonus: 65 },
-    { id: "st_shadow", name: "Cetro Sombrio", class: "mage", val: 170, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🌑", hpBonus: 85 },
-    { id: "st_magus", name: "Cetro do Imperador Magus", class: "mage", val: 230, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "👑", hpBonus: 130 },
-    { id: "st_creation", name: "Cetro da Criação", class: "mage", val: 310, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "🌟", hpBonus: 190 },
+    // MAGO - 10 armas (cada uma com sprite único procedural)
+    { id: "st_wood", type: "weapon", name: "Cajado de Madeira", class: "mage", val: 3, price: 10, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🪵", hpBonus: 0 },
+    { id: "st_simple", type: "weapon", name: "Cajado Simples", class: "mage", val: 9, price: 80, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🔮", hpBonus: 5 },
+    { id: "st_apprentice", type: "weapon", name: "Cajado do Aprendiz", class: "mage", val: 20, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🔮", hpBonus: 10 },
+    { id: "st_crystal", type: "weapon", name: "Varinha de Cristal", class: "mage", val: 35, price: 600, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "💎", hpBonus: 18 },
+    { id: "st_elemental", type: "weapon", name: "Cetro do Elemental", class: "mage", val: 58, price: 1500, level: 40, rarity: ITEM_RARITY.RARE, icon: "🔮", hpBonus: 30 },
+    { id: "st_inferno", type: "weapon", name: "Cetro de Fogo Infernal", class: "mage", val: 90, price: 3500, level: 60, rarity: ITEM_RARITY.RARE, icon: "🔥", hpBonus: 45 },
+    { id: "st_deepice", type: "weapon", name: "Cetro de Gelo Profundo", class: "mage", val: 125, price: 7000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "❄️", hpBonus: 65 },
+    { id: "st_shadow", type: "weapon", name: "Cetro Sombrio", class: "mage", val: 170, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🌑", hpBonus: 85 },
+    { id: "st_magus", type: "weapon", name: "Cetro do Imperador Magus", class: "mage", val: 230, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "👑", hpBonus: 130 },
+    { id: "st_creation", type: "weapon", name: "Cetro da Criação", class: "mage", val: 310, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "🌟", hpBonus: 190 },
 ];
 
 const ARMOR_DATABASE = [
-    // Capacetes
-    { id: "hel_leather", name: "Capacete de Couro", slot: "helmet", class: "all", hpBonus: 10, dmgBonus: 1, price: 30, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🎩" },
-    { id: "hel_iron", name: "Capacete de Ferro", slot: "helmet", class: "all", hpBonus: 25, dmgBonus: 2, price: 150, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🪖" },
-    { id: "hel_steel", name: "Elmo de Aço", slot: "helmet", class: "all", hpBonus: 50, dmgBonus: 4, price: 500, level: 35, rarity: ITEM_RARITY.RARE, icon: "🪖" },
-    { id: "hel_dragon", name: "Elmo do Dragão", slot: "helmet", class: "all", hpBonus: 100, dmgBonus: 8, price: 8000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
-    { id: "hel_ancient", name: "Elmo Ancião", slot: "helmet", class: "all", hpBonus: 180, dmgBonus: 15, price: 30000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "👑" },
+    // =============== CAPACETES (10 itens: 5 originais + 5 novos) ===============
+    { id: "hel_leather", type: "armor", name: "Capacete de Couro", slot: "helmet", class: "all", hpBonus: 22, dmgBonus: 1, price: 30, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🎩" },
+    { id: "hel_iron", type: "armor", name: "Capacete de Ferro", slot: "helmet", class: "all", hpBonus: 55, dmgBonus: 2, price: 150, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🪖" },
+    { id: "hel_steel", type: "armor", name: "Elmo de Aço", slot: "helmet", class: "all", hpBonus: 110, dmgBonus: 4, price: 500, level: 35, rarity: ITEM_RARITY.RARE, icon: "🪖" },
+    { id: "hel_dragon", type: "armor", name: "Elmo do Dragão", slot: "helmet", class: "all", hpBonus: 220, dmgBonus: 8, price: 8000, level: 80, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
+    { id: "hel_ancient", type: "armor", name: "Elmo Ancião", slot: "helmet", class: "all", hpBonus: 400, dmgBonus: 15, price: 30000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "👑" },
+    // NOVOS capacetes
+    { id: "hel_bronze", type: "armor", name: "Capacete de Bronze", slot: "helmet", class: "all", hpBonus: 35, dmgBonus: 1, price: 60, level: 5, rarity: ITEM_RARITY.COMMON, icon: "⛑️" },
+    { id: "hel_templar", type: "armor", name: "Elmo Templário", slot: "helmet", class: "all", hpBonus: 80, dmgBonus: 3, price: 350, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🎖️" },
+    { id: "hel_shadow", type: "armor", name: "Capuz das Sombras", slot: "helmet", class: "all", hpBonus: 160, dmgBonus: 6, price: 1500, level: 50, rarity: ITEM_RARITY.RARE, icon: "🥷" },
+    { id: "hel_emperor", type: "armor", name: "Coroa do Imperador", slot: "helmet", class: "all", hpBonus: 290, dmgBonus: 11, price: 15000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "👑" },
+    { id: "hel_chaos", type: "armor", name: "Máscara do Caos", slot: "helmet", class: "all", hpBonus: 520, dmgBonus: 22, price: 55000, level: 180, rarity: ITEM_RARITY.LEGENDARY, icon: "🎭" },
 
-    // Armaduras (Peito)
-    { id: "arm_cloth", name: "Túnica de Pano", slot: "armor", class: "all", hpBonus: 15, dmgBonus: 1, price: 40, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👕" },
-    { id: "arm_leather", name: "Armadura de Couro", slot: "armor", class: "all", hpBonus: 35, dmgBonus: 3, price: 200, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🦺" },
-    { id: "arm_chain", name: "Cota de Malha", slot: "armor", class: "all", hpBonus: 70, dmgBonus: 5, price: 800, level: 35, rarity: ITEM_RARITY.RARE, icon: "🛡️" },
-    { id: "arm_plate", name: "Armadura de Placas", slot: "armor", class: "all", hpBonus: 130, dmgBonus: 10, price: 5000, level: 70, rarity: ITEM_RARITY.EPIC, icon: "🛡️" },
-    { id: "arm_god", name: "Armadura Divina", slot: "armor", class: "all", hpBonus: 250, dmgBonus: 20, price: 35000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "✨" },
+    // =============== ARMADURAS DE PEITO (10 itens) ===============
+    { id: "arm_cloth", type: "armor", name: "Túnica de Pano", slot: "armor", class: "all", hpBonus: 32, dmgBonus: 1, price: 40, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👕" },
+    { id: "arm_leather", type: "armor", name: "Armadura de Couro", slot: "armor", class: "all", hpBonus: 80, dmgBonus: 3, price: 200, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "🦺" },
+    { id: "arm_chain", type: "armor", name: "Cota de Malha", slot: "armor", class: "all", hpBonus: 160, dmgBonus: 5, price: 800, level: 35, rarity: ITEM_RARITY.RARE, icon: "🛡️" },
+    { id: "arm_plate", type: "armor", name: "Armadura de Placas", slot: "armor", class: "all", hpBonus: 300, dmgBonus: 10, price: 5000, level: 70, rarity: ITEM_RARITY.EPIC, icon: "🛡️" },
+    { id: "arm_god", type: "armor", name: "Armadura Divina", slot: "armor", class: "all", hpBonus: 580, dmgBonus: 20, price: 35000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "✨" },
+    // NOVAS armaduras
+    { id: "arm_bronze", type: "armor", name: "Cota de Bronze", slot: "armor", class: "all", hpBonus: 55, dmgBonus: 2, price: 100, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🥋" },
+    { id: "arm_templar", type: "armor", name: "Armadura do Templário", slot: "armor", class: "all", hpBonus: 115, dmgBonus: 4, price: 450, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "⚜️" },
+    { id: "arm_shadow", type: "armor", name: "Manto das Trevas", slot: "armor", class: "all", hpBonus: 230, dmgBonus: 7, price: 2200, level: 50, rarity: ITEM_RARITY.RARE, icon: "🌫️" },
+    { id: "arm_emperor", type: "armor", name: "Armadura do Imperador", slot: "armor", class: "all", hpBonus: 420, dmgBonus: 14, price: 18000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🏛️" },
+    { id: "arm_cosmos", type: "armor", name: "Vestes do Cosmos", slot: "armor", class: "all", hpBonus: 720, dmgBonus: 28, price: 65000, level: 180, rarity: ITEM_RARITY.LEGENDARY, icon: "🌌" },
 
-    // Luvas
-    { id: "glov_cloth", name: "Luvas de Pano", slot: "gloves", class: "all", hpBonus: 5, dmgBonus: 1, price: 20, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🧤" },
-    { id: "glov_leather", name: "Luvas de Couro", slot: "gloves", class: "all", hpBonus: 15, dmgBonus: 2, price: 100, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "🧤" },
-    { id: "glov_iron", name: "Manoplas de Ferro", slot: "gloves", class: "all", hpBonus: 30, dmgBonus: 4, price: 400, level: 30, rarity: ITEM_RARITY.RARE, icon: "🥊" },
-    { id: "glov_dragon", name: "Garras de Dragão", slot: "gloves", class: "all", hpBonus: 60, dmgBonus: 8, price: 4000, level: 75, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
-    { id: "glov_god", name: "Luvas Celestiais", slot: "gloves", class: "all", hpBonus: 120, dmgBonus: 15, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🌟" },
+    // =============== LUVAS (10 itens) ===============
+    { id: "glov_cloth", type: "armor", name: "Luvas de Pano", slot: "gloves", class: "all", hpBonus: 12, dmgBonus: 1, price: 20, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🧤" },
+    { id: "glov_leather", type: "armor", name: "Luvas de Couro", slot: "gloves", class: "all", hpBonus: 35, dmgBonus: 2, price: 100, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "🧤" },
+    { id: "glov_iron", type: "armor", name: "Manoplas de Ferro", slot: "gloves", class: "all", hpBonus: 70, dmgBonus: 4, price: 400, level: 30, rarity: ITEM_RARITY.RARE, icon: "🥊" },
+    { id: "glov_dragon", type: "armor", name: "Garras de Dragão", slot: "gloves", class: "all", hpBonus: 140, dmgBonus: 8, price: 4000, level: 75, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
+    { id: "glov_god", type: "armor", name: "Luvas Celestiais", slot: "gloves", class: "all", hpBonus: 280, dmgBonus: 15, price: 25000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "🌟" },
+    // NOVAS luvas
+    { id: "glov_bronze", type: "armor", name: "Luvas de Bronze", slot: "gloves", class: "all", hpBonus: 22, dmgBonus: 1, price: 50, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🤜" },
+    { id: "glov_templar", type: "armor", name: "Manoplas do Templário", slot: "gloves", class: "all", hpBonus: 50, dmgBonus: 3, price: 250, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "⚔️" },
+    { id: "glov_shadow", type: "armor", name: "Mãos Sombrias", slot: "gloves", class: "all", hpBonus: 100, dmgBonus: 6, price: 1200, level: 50, rarity: ITEM_RARITY.RARE, icon: "🦾" },
+    { id: "glov_emperor", type: "armor", name: "Garras Imperiais", slot: "gloves", class: "all", hpBonus: 200, dmgBonus: 11, price: 9000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🦅" },
+    { id: "glov_cosmos", type: "armor", name: "Mãos do Cosmos", slot: "gloves", class: "all", hpBonus: 360, dmgBonus: 20, price: 38000, level: 180, rarity: ITEM_RARITY.LEGENDARY, icon: "🌠" },
 
-    // Calças
-    { id: "leg_cloth", name: "Calças de Pano", slot: "legs", class: "all", hpBonus: 10, dmgBonus: 0, price: 25, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👖" },
-    { id: "leg_leather", name: "Calças de Couro", slot: "legs", class: "all", hpBonus: 25, dmgBonus: 1, price: 120, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "👖" },
-    { id: "leg_iron", name: "Grevas de Ferro", slot: "legs", class: "all", hpBonus: 50, dmgBonus: 3, price: 450, level: 30, rarity: ITEM_RARITY.RARE, icon: "🦵" },
-    { id: "leg_dragon", name: "Grevas de Dragão", slot: "legs", class: "all", hpBonus: 90, dmgBonus: 6, price: 3500, level: 75, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
-    { id: "leg_god", name: "Grevas Divinas", slot: "legs", class: "all", hpBonus: 170, dmgBonus: 12, price: 22000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "✨" },
+    // =============== CALÇAS (10 itens) ===============
+    { id: "leg_cloth", type: "armor", name: "Calças de Pano", slot: "legs", class: "all", hpBonus: 22, dmgBonus: 0, price: 25, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👖" },
+    { id: "leg_leather", type: "armor", name: "Calças de Couro", slot: "legs", class: "all", hpBonus: 55, dmgBonus: 1, price: 120, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "👖" },
+    { id: "leg_iron", type: "armor", name: "Grevas de Ferro", slot: "legs", class: "all", hpBonus: 110, dmgBonus: 3, price: 450, level: 30, rarity: ITEM_RARITY.RARE, icon: "🦵" },
+    { id: "leg_dragon", type: "armor", name: "Grevas de Dragão", slot: "legs", class: "all", hpBonus: 200, dmgBonus: 6, price: 3500, level: 75, rarity: ITEM_RARITY.EPIC, icon: "🐲" },
+    { id: "leg_god", type: "armor", name: "Grevas Divinas", slot: "legs", class: "all", hpBonus: 380, dmgBonus: 12, price: 22000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "✨" },
+    // NOVAS calças
+    { id: "leg_bronze", type: "armor", name: "Perneiras de Bronze", slot: "legs", class: "all", hpBonus: 38, dmgBonus: 0, price: 70, level: 5, rarity: ITEM_RARITY.COMMON, icon: "👖" },
+    { id: "leg_templar", type: "armor", name: "Grevas do Templário", slot: "legs", class: "all", hpBonus: 80, dmgBonus: 2, price: 300, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "🥋" },
+    { id: "leg_shadow", type: "armor", name: "Calças Sombrias", slot: "legs", class: "all", hpBonus: 150, dmgBonus: 4, price: 1500, level: 50, rarity: ITEM_RARITY.RARE, icon: "🖤" },
+    { id: "leg_emperor", type: "armor", name: "Perneiras Imperiais", slot: "legs", class: "all", hpBonus: 270, dmgBonus: 8, price: 12000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "👑" },
+    { id: "leg_cosmos", type: "armor", name: "Calças do Cosmos", slot: "legs", class: "all", hpBonus: 460, dmgBonus: 16, price: 42000, level: 180, rarity: ITEM_RARITY.LEGENDARY, icon: "🌌" },
 
-    // Botas
-    { id: "boot_cloth", name: "Botas de Pano", slot: "boots", class: "all", hpBonus: 5, dmgBonus: 0, price: 20, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👢" },
-    { id: "boot_leather", name: "Botas de Couro", slot: "boots", class: "all", hpBonus: 15, dmgBonus: 1, price: 100, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "👢" },
-    { id: "boot_iron", name: "Botas de Ferro", slot: "boots", class: "all", hpBonus: 30, dmgBonus: 2, price: 350, level: 30, rarity: ITEM_RARITY.RARE, icon: "🥾" },
-    { id: "boot_wind", name: "Botas do Vento", slot: "boots", class: "all", hpBonus: 55, dmgBonus: 5, price: 3000, level: 75, rarity: ITEM_RARITY.EPIC, icon: "💨" },
-    { id: "boot_god", name: "Botas Celestiais", slot: "boots", class: "all", hpBonus: 100, dmgBonus: 10, price: 18000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "☁️" },
+    // =============== BOTAS (10 itens) ===============
+    { id: "boot_cloth", type: "armor", name: "Botas de Pano", slot: "boots", class: "all", hpBonus: 12, dmgBonus: 0, price: 20, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👢" },
+    { id: "boot_leather", type: "armor", name: "Botas de Couro", slot: "boots", class: "all", hpBonus: 35, dmgBonus: 1, price: 100, level: 10, rarity: ITEM_RARITY.UNCOMMON, icon: "👢" },
+    { id: "boot_iron", type: "armor", name: "Botas de Ferro", slot: "boots", class: "all", hpBonus: 70, dmgBonus: 2, price: 350, level: 30, rarity: ITEM_RARITY.RARE, icon: "🥾" },
+    { id: "boot_wind", type: "armor", name: "Botas do Vento", slot: "boots", class: "all", hpBonus: 130, dmgBonus: 5, price: 3000, level: 75, rarity: ITEM_RARITY.EPIC, icon: "💨" },
+    { id: "boot_god", type: "armor", name: "Botas Celestiais", slot: "boots", class: "all", hpBonus: 240, dmgBonus: 10, price: 18000, level: 150, rarity: ITEM_RARITY.LEGENDARY, icon: "☁️" },
+    // NOVAS botas
+    { id: "boot_bronze", type: "armor", name: "Sandálias de Bronze", slot: "boots", class: "all", hpBonus: 22, dmgBonus: 0, price: 55, level: 5, rarity: ITEM_RARITY.COMMON, icon: "🥿" },
+    { id: "boot_templar", type: "armor", name: "Botas do Templário", slot: "boots", class: "all", hpBonus: 50, dmgBonus: 1, price: 280, level: 25, rarity: ITEM_RARITY.UNCOMMON, icon: "👞" },
+    { id: "boot_shadow", type: "armor", name: "Botas Sombrias", slot: "boots", class: "all", hpBonus: 95, dmgBonus: 3, price: 1300, level: 50, rarity: ITEM_RARITY.RARE, icon: "🥾" },
+    { id: "boot_emperor", type: "armor", name: "Botas Imperiais", slot: "boots", class: "all", hpBonus: 175, dmgBonus: 7, price: 10000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "👢" },
+    { id: "boot_cosmos", type: "armor", name: "Botas do Cosmos", slot: "boots", class: "all", hpBonus: 320, dmgBonus: 14, price: 32000, level: 180, rarity: ITEM_RARITY.LEGENDARY, icon: "🌠" },
 
-    // Bags
-    { id: "bag_small", name: "Mochila Pequena", slot: "bag", class: "all", capacity: 5, hpBonus: 0, dmgBonus: 0, price: 100, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🎒" },
-    { id: "bag_medium", name: "Mochila de Couro", slot: "bag", class: "all", capacity: 10, hpBonus: 5, dmgBonus: 0, price: 500, level: 20, rarity: ITEM_RARITY.UNCOMMON, icon: "🎒" },
-    { id: "bag_large", name: "Mochila de Aventureiro", slot: "bag", class: "all", capacity: 15, hpBonus: 10, dmgBonus: 1, price: 2000, level: 50, rarity: ITEM_RARITY.RARE, icon: "🎒" },
-    { id: "bag_giant", name: "Mochila Titã", slot: "bag", class: "all", capacity: 25, hpBonus: 20, dmgBonus: 2, price: 10000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🎒" },
-    { id: "bag_infinite", name: "Bolsa Dimensional", slot: "bag", class: "all", capacity: 40, hpBonus: 40, dmgBonus: 5, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "🌀" },
+    // =============== MOCHILAS (10 itens) ===============
+    { id: "bag_small", type: "bag", name: "Mochila Pequena", slot: "bag", class: "all", capacity: 5, hpBonus: 0, dmgBonus: 0, price: 100, level: 1, rarity: ITEM_RARITY.COMMON, icon: "🎒" },
+    { id: "bag_medium", type: "bag", name: "Mochila de Couro", slot: "bag", class: "all", capacity: 10, hpBonus: 14, dmgBonus: 0, price: 500, level: 20, rarity: ITEM_RARITY.UNCOMMON, icon: "🎒" },
+    { id: "bag_large", type: "bag", name: "Mochila de Aventureiro", slot: "bag", class: "all", capacity: 15, hpBonus: 28, dmgBonus: 1, price: 2000, level: 50, rarity: ITEM_RARITY.RARE, icon: "🎒" },
+    { id: "bag_giant", type: "bag", name: "Mochila Titã", slot: "bag", class: "all", capacity: 25, hpBonus: 55, dmgBonus: 2, price: 10000, level: 100, rarity: ITEM_RARITY.EPIC, icon: "🎒" },
+    { id: "bag_infinite", type: "bag", name: "Bolsa Dimensional", slot: "bag", class: "all", capacity: 40, hpBonus: 110, dmgBonus: 5, price: 50000, level: 200, rarity: ITEM_RARITY.LEGENDARY, icon: "🌀" },
+    // NOVAS bags
+    { id: "bag_cloth", type: "bag", name: "Saco de Pano", slot: "bag", class: "all", capacity: 3, hpBonus: 0, dmgBonus: 0, price: 40, level: 1, rarity: ITEM_RARITY.COMMON, icon: "👜" },
+    { id: "bag_bronze", type: "bag", name: "Mochila de Bronze", slot: "bag", class: "all", capacity: 8, hpBonus: 8, dmgBonus: 0, price: 250, level: 15, rarity: ITEM_RARITY.UNCOMMON, icon: "👝" },
+    { id: "bag_shadow", type: "bag", name: "Mochila Sombria", slot: "bag", class: "all", capacity: 12, hpBonus: 20, dmgBonus: 0, price: 1200, level: 40, rarity: ITEM_RARITY.RARE, icon: "🎒" },
+    { id: "bag_imperial", type: "bag", name: "Mala Imperial", slot: "bag", class: "all", capacity: 20, hpBonus: 42, dmgBonus: 1, price: 6000, level: 85, rarity: ITEM_RARITY.EPIC, icon: "💼" },
+    { id: "bag_cosmos", type: "bag", name: "Cofre do Cosmos", slot: "bag", class: "all", capacity: 35, hpBonus: 85, dmgBonus: 3, price: 30000, level: 175, rarity: ITEM_RARITY.LEGENDARY, icon: "✨" },
 ];
 
 const ALL_EQUIPMENT = [...WEAPONS_DATABASE, ...ARMOR_DATABASE];
 
 function getItemById(id) {
     return ALL_EQUIPMENT.find(i => i.id === id) || null;
+}
+
+// ===== SPRITES PROCEDURAIS (geram ícones por item, com base no id/tipo/raridade) =====
+const itemSpriteCache = {};
+function hashStr(s) {
+    let h = 0;
+    for (let i = 0; i < s.length; i++) { h = ((h << 5) - h) + s.charCodeAt(i); h |= 0; }
+    return Math.abs(h);
+}
+function rarityHex(r) {
+    return ({ common: '#9ca3af', uncommon: '#22c55e', rare: '#3b82f6', epic: '#a855f7', legendary: '#f59e0b' })[r] || '#9ca3af';
+}
+function rarityBg(r) {
+    return ({ common: '#1f2530', uncommon: '#0e2a17', rare: '#0e1d3a', epic: '#1f0e34', legendary: '#2d1d05' })[r] || '#1f2530';
+}
+// Desenha a forma do item dependendo do slot/classe
+function drawItemForm(ctx, item, cx, cy, size) {
+    const id = item.id;
+    const slot = item.slot || null;
+    const cls = item.class;
+    const h = hashStr(id);
+    const metalHue = (h * 7) % 360;
+    const metal2Hue = (h * 13 + 90) % 360;
+    const woodHue = (h * 5 + 30) % 60 + 15; // tons amarronzados
+    const t1 = `hsl(${metalHue}, ${35 + (h % 25)}%, ${55 + (h % 15)}%)`;
+    const t2 = `hsl(${metal2Hue}, ${40 + (h % 25)}%, ${35 + (h % 18)}%)`;
+    const t3 = `hsl(${woodHue}, ${55 + (h % 20)}%, ${28 + (h % 15)}%)`;
+    const gold = '#f5c042';
+
+    // ===== ESPADAS DO GUERREIRO =====
+    if ((!slot && cls === 'warrior')) {
+        ctx.save();
+        // Lâmina
+        ctx.fillStyle = t1;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 22);
+        ctx.lineTo(cx + 4, cy - 6);
+        ctx.lineTo(cx + 2, cy + 4);
+        ctx.lineTo(cx - 2, cy + 4);
+        ctx.lineTo(cx - 4, cy - 6);
+        ctx.closePath();
+        ctx.fill();
+        // Faixa de brilho
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(cx - 1, cy - 20, 1, 22);
+        // Guarda (crossguard)
+        ctx.fillStyle = gold;
+        ctx.fillRect(cx - 8, cy + 4, 16, 3);
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 8, cy + 4, 16, 1);
+        // Cabo
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 2, cy + 7, 4, 8);
+        // Punta do cabo (pommel)
+        ctx.fillStyle = gold;
+        ctx.beginPath();
+        ctx.arc(cx, cy + 16, 3, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fff8b5';
+        ctx.fillRect(cx - 1, cy + 14, 1, 2);
+        ctx.restore();
+        return;
+    }
+
+    // ===== ARCOS DO ARQUEIRO =====
+    if ((!slot && cls === 'archer')) {
+        ctx.save();
+        // Madeira
+        ctx.strokeStyle = t3;
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 18, -Math.PI / 2 - 0.6, Math.PI / 2 + 0.6);
+        ctx.stroke();
+        ctx.strokeStyle = t2;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 18, -Math.PI / 2 - 0.6, Math.PI / 2 + 0.6);
+        ctx.stroke();
+        // Corda
+        ctx.strokeStyle = '#e8e2c5';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(cx + 15, cy - 11);
+        ctx.lineTo(cx + 15, cy + 11);
+        ctx.stroke();
+        // Flexa encaixada
+        ctx.fillStyle = '#cfc5a3';
+        ctx.fillRect(cx + 14, cy - 1, 5, 1.5);
+        // Ponta
+        ctx.fillStyle = t1;
+        ctx.beginPath();
+        ctx.moveTo(cx + 19, cy - 0.5);
+        ctx.lineTo(cx + 22, cy);
+        ctx.lineTo(cx + 19, cy + 1.5);
+        ctx.closePath();
+        ctx.fill();
+        // Adorno central
+        ctx.fillStyle = gold;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+
+    // ===== CAJADOS DO MAGO =====
+    if ((!slot && cls === 'mage')) {
+        ctx.save();
+        // Cabo
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 2.5, cy + 2, 5, 24);
+        // Virola no cabo
+        ctx.fillStyle = gold;
+        ctx.fillRect(cx - 4, cy + 2, 8, 2);
+        ctx.fillRect(cx - 4, cy + 22, 8, 2);
+        // Orbe
+        const orbColor = (h % 3 === 0) ? '#7c3aed' : (h % 3 === 1) ? '#06b6d4' : '#ef4444';
+        ctx.fillStyle = '#0c0c14';
+        ctx.beginPath();
+        ctx.arc(cx, cy - 8, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = orbColor;
+        ctx.globalAlpha = 0.75;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 8, 6.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        // Brilho
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.beginPath();
+        ctx.arc(cx - 2, cy - 10, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        // Garras ao redor do orbe
+        ctx.fillStyle = gold;
+        for (let i = 0; i < 4; i++) {
+            const a = (i / 4) * Math.PI * 2 + (h % 7) * 0.2;
+            ctx.fillRect(cx + Math.cos(a) * 9 - 0.5, cy - 8 + Math.sin(a) * 9 - 0.5, 1.5, 1.5);
+        }
+        ctx.restore();
+        return;
+    }
+
+    // ===== CAPACETE =====
+    if (slot === 'helmet') {
+        ctx.save();
+        ctx.fillStyle = t1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 13, cy + 8);
+        ctx.lineTo(cx - 13, cy - 2);
+        ctx.quadraticCurveTo(cx - 13, cy - 14, cx, cy - 14);
+        ctx.quadraticCurveTo(cx + 13, cy - 14, cx + 13, cy - 2);
+        ctx.lineTo(cx + 13, cy + 8);
+        ctx.closePath();
+        ctx.fill();
+        // Abertura da viseira
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fillRect(cx - 7, cy - 4, 14, 4);
+        // Faixa
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 13, cy + 4, 26, 2);
+        // Cristal/decoraÃ§Ã£o
+        ctx.fillStyle = gold;
+        ctx.beginPath();
+        ctx.arc(cx, cy + 1, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        // Topete
+        ctx.strokeStyle = t3;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 14);
+        ctx.lineTo(cx, cy - 20 + (h % 3));
+        ctx.stroke();
+        ctx.restore();
+        return;
+    }
+
+    // ===== ARMADURA (peitoral) =====
+    if (slot === 'armor') {
+        ctx.save();
+        ctx.fillStyle = t1;
+        ctx.beginPath();
+        ctx.moveTo(cx - 14, cy - 12);
+        ctx.lineTo(cx + 14, cy - 12);
+        ctx.lineTo(cx + 11, cy + 12);
+        ctx.lineTo(cx + 4, cy + 14);
+        ctx.lineTo(cx, cy + 11);
+        ctx.lineTo(cx - 4, cy + 14);
+        ctx.lineTo(cx - 11, cy + 12);
+        ctx.closePath();
+        ctx.fill();
+        // Recorte central
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 4, cy - 8, 8, 16);
+        // Plaquinha central
+        ctx.fillStyle = gold;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 1, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        // Cintas
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 13, cy - 4, 4, 1);
+        ctx.fillRect(cx + 9, cy - 4, 4, 1);
+        ctx.restore();
+        return;
+    }
+
+    // ===== LUVAS =====
+    if (slot === 'gloves') {
+        ctx.save();
+        ctx.fillStyle = t1;
+        // Palma + dedos (mão direita apontando pra cima)
+        ctx.fillRect(cx - 7, cy - 8, 14, 14);
+        ctx.fillRect(cx - 7, cy - 14, 4, 6);
+        ctx.fillRect(cx - 2, cy - 16, 4, 8);
+        ctx.fillRect(cx + 3, cy - 14, 4, 6);
+        // Polegar
+        ctx.fillRect(cx - 11, cy - 4, 4, 8);
+        // Punho
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 8, cy + 5, 16, 5);
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 8, cy + 9, 16, 1);
+        // Detalhe
+        ctx.fillStyle = gold;
+        ctx.fillRect(cx - 1, cy - 3, 2, 2);
+        ctx.restore();
+        return;
+    }
+
+    // ===== CALÇAS (LEGS) =====
+    if (slot === 'legs') {
+        ctx.save();
+        // Cintura
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 12, cy - 12, 24, 5);
+        // Pernas
+        ctx.fillStyle = t1;
+        ctx.fillRect(cx - 11, cy - 7, 9, 18);
+        ctx.fillRect(cx + 2, cy - 7, 9, 18);
+        // Joelhos (metal)
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 10, cy + 3, 7, 3);
+        ctx.fillRect(cx + 3, cy + 3, 7, 3);
+        // Entre pernas
+        ctx.fillStyle = '#0c0c14';
+        ctx.fillRect(cx - 1, cy - 7, 2, 18);
+        // Fivela
+        ctx.fillStyle = gold;
+        ctx.fillRect(cx - 2, cy - 10, 4, 2);
+        ctx.restore();
+        return;
+    }
+
+    // ===== BOTAS =====
+    if (slot === 'boots') {
+        ctx.save();
+        // Cano
+        ctx.fillStyle = t1;
+        ctx.fillRect(cx - 11, cy - 12, 11, 14);
+        ctx.fillRect(cx + 1, cy - 12, 11, 14);
+        // Coroa (parte de cima)
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 12, cy - 13, 13, 3);
+        ctx.fillRect(cx, cy - 13, 13, 3);
+        // Solado/peito do pé
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 14, cy + 2, 16, 5);
+        ctx.fillRect(cx - 1, cy + 2, 16, 5);
+        ctx.fillRect(cx - 14, cy + 6, 16, 2);
+        ctx.fillRect(cx - 1, cy + 6, 16, 2);
+        // Detalhe brilhante
+        ctx.fillStyle = gold;
+        ctx.fillRect(cx - 7, cy - 5, 2, 2);
+        ctx.fillRect(cx + 5, cy - 5, 2, 2);
+        ctx.restore();
+        return;
+    }
+
+    // ===== MOCHILA (BAG) =====
+    if (slot === 'bag') {
+        ctx.save();
+        ctx.fillStyle = t3;
+        // Corpo principal
+        ctx.fillRect(cx - 12, cy - 10, 24, 22);
+        ctx.fillStyle = t1;
+        // Tampa
+        ctx.fillRect(cx - 13, cy - 12, 26, 6);
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 13, cy - 12, 26, 1);
+        // AlÃ§as
+        ctx.fillStyle = t3;
+        ctx.fillRect(cx - 10, cy - 18, 3, 6);
+        ctx.fillRect(cx + 7, cy - 18, 3, 6);
+        // Bolsos
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 9, cy - 4, 6, 7);
+        ctx.fillRect(cx + 3, cy - 4, 6, 7);
+        // Fivela/fecho
+        ctx.fillStyle = gold;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 9, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        return;
+    }
+
+    // ===== POÇÕES (HP/MP) =====
+    if (item.type === 'potion') {
+        ctx.save();
+        const isHp = item.effect === 'heal_hp';
+        const liquid = isHp ? '#e74c3c' : '#3498db';
+        const liquidHi = isHp ? '#ff9a8b' : '#7cc7ff';
+        const cork = t3;
+        // Frasco (corpo arredondado)
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        ctx.beginPath();
+        ctx.moveTo(cx - 9, cy - 6);
+        ctx.lineTo(cx - 10, cy + 8);
+        ctx.quadraticCurveTo(cx - 10, cy + 13, cx - 6, cy + 13);
+        ctx.lineTo(cx + 6, cy + 13);
+        ctx.quadraticCurveTo(cx + 10, cy + 13, cx + 10, cy + 8);
+        ctx.lineTo(cx + 9, cy - 6);
+        ctx.closePath();
+        ctx.fill();
+        // Vidro principal (cor)
+        ctx.fillStyle = liquid;
+        ctx.beginPath();
+        ctx.moveTo(cx - 8, cy - 2);
+        ctx.lineTo(cx - 9, cy + 8);
+        ctx.quadraticCurveTo(cx - 9, cy + 12, cx - 5, cy + 12);
+        ctx.lineTo(cx + 5, cy + 12);
+        ctx.quadraticCurveTo(cx + 9, cy + 12, cx + 9, cy + 8);
+        ctx.lineTo(cx + 8, cy - 2);
+        ctx.closePath();
+        ctx.fill();
+        // Brilho do líquido
+        ctx.fillStyle = liquidHi;
+        ctx.beginPath();
+        ctx.moveTo(cx - 6, cy + 1);
+        ctx.lineTo(cx - 7, cy + 8);
+        ctx.lineTo(cx - 3, cy + 8);
+        ctx.lineTo(cx - 2, cy + 1);
+        ctx.closePath();
+        ctx.fill();
+        // PescoÃ§o
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.fillRect(cx - 4, cy - 9, 8, 4);
+        // Rolha
+        ctx.fillStyle = cork;
+        ctx.fillRect(cx - 4, cy - 13, 8, 5);
+        ctx.fillStyle = t2;
+        ctx.fillRect(cx - 4, cy - 9, 8, 1);
+        // Símbolo + ou -
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(cx - 4, cy + 4, 8, 1.5);
+        if (isHp) ctx.fillRect(cx - 0.75, cy + 0.5, 1.5, 8);
+        ctx.restore();
+        return;
+    }
+}
+function generateItemSpriteDataURL(item, size = 48) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    const cx = size / 2;
+    const cy = size / 2;
+    const rarity = item.rarity || ITEM_RARITY.COMMON;
+
+    // Fundo base — varia por raridade
+    ctx.fillStyle = rarityBg(rarity);
+    ctx.fillRect(0, 0, size, size);
+    // Quadrante escuro nas pontas para enquadrar
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(0, 0, size, 3);
+    ctx.fillRect(0, size - 3, size, 3);
+    ctx.fillRect(0, 0, 3, size);
+    ctx.fillRect(size - 3, 0, 3, size);
+
+    // Padrão sutil baseado em hash
+    const h = hashStr(item.id);
+    ctx.fillStyle = `rgba(255,255,255,${0.03 + (h % 5) * 0.01})`;
+    for (let i = 0; i < 5 + (h % 5); i++) {
+        const x = (h * (i + 3) * 7) % size;
+        const y = (h * (i + 5) * 11) % size;
+        ctx.fillRect(x, y, 1, 1);
+    }
+
+    drawItemForm(ctx, item, cx, cy, size);
+
+    // Borda da raridade
+    ctx.strokeStyle = rarityHex(rarity);
+    ctx.lineWidth = (rarity === 'legendary') ? 3 : 2;
+    ctx.strokeRect(1.5, 1.5, size - 3, size - 3);
+
+    // Brilho extra para legendary e epic
+    if (rarity === 'legendary') {
+        ctx.save();
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = '#fde68a';
+        ctx.fillRect(0, 0, size, 6);
+        ctx.fillRect(0, size - 6, size, 6);
+        ctx.restore();
+    } else if (rarity === 'epic') {
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.fillStyle = '#c084fc';
+        ctx.fillRect(0, 0, 3, size);
+        ctx.fillRect(size - 3, 0, 3, size);
+        ctx.restore();
+    }
+
+    return canvas.toDataURL();
+}
+function getItemSpriteDataURL(item) {
+    if (!item) return '';
+    if (!itemSpriteCache[item.id]) itemSpriteCache[item.id] = generateItemSpriteDataURL(item, 48);
+    return itemSpriteCache[item.id];
+}
+function itemIconHTML(item, opts = {}) {
+    if (!item) return '<span class="text-lg">📦</span>';
+    const url = getItemSpriteDataURL(item);
+    if (!url) return '<span class="text-lg">📦</span>';
+    return `<img class="item-sprite" alt="${item.name}" src="${url}" style="width:${opts.size || '100%'};height:${opts.size || '100%'};object-fit:contain;" />`;
+}
+
+// Slots vazios (visuais para os equips sem nada equipado)
+function emptySlotIcon(slot) {
+    const def = {
+        helmet: { icon: '🪖', label: 'Capacete' },
+        armor:  { icon: '🛡️', label: 'Armadura' },
+        gloves: { icon: '🧤', label: 'Luvas' },
+        weapon: { icon: '⚔️', label: 'Arma' },
+        legs:   { icon: '👖', label: 'Calça' },
+        boots:  { icon: '👢', label: 'Botas' },
+        bag:    { icon: '🎒', label: 'Bag' }
+    }[slot];
+    return `<span class="text-lg">${def.icon}</span><span class="text-[7px] text-slate-500">${def.label}</span>`;
 }
 
 function getRarityColor(rarity) {
@@ -353,7 +833,7 @@ const MAPS_DATABASE = [
     { id: 13, name: "Ninho dos Wyverns", level: "130-155", safe: false, color: "#1d2530", wallColor: "#0e1218", enemyName: "Wyvern Elétrico", enemyColor: "#3498db", bossName: "Tempestade Azul", isBossMap: false, mobLevel: 142, archerMob: false },
     { id: 14, name: "Elfos Corrompidos", level: "155-185", safe: false, color: "#1a2e1d", wallColor: "#0d170e", enemyName: "Elfo Corrompido", enemyColor: "#27ae60", bossName: "Elrond Negro", isBossMap: false, mobLevel: 168, archerMob: true, archerName: "Elfo Arqueiro", archerColor: "#00b894" },
     { id: 15, name: "Masmorra Sombria", level: "185-220", safe: false, color: "#1e1724", wallColor: "#0f0b12", enemyName: "Invocador", enemyColor: "#8e44ad", bossName: "Lich Mortis", isBossMap: false, mobLevel: 200, archerMob: false },
-    { id: 16, name: "Profundezas de Formiga", level: "220-260", safe: false, color: "#11151c", wallColor: "#080a0e", enemyName: "Devorador", enemyColor: "#2c3e50", bossName: "Abominável", isBossMap: false, mobLevel: 238, archerMob: true, archerName: "Devorador Arqueiro", archerColor: "#57606f" },
+    { id: 16, name: "Profundezas de Lunaris", level: "220-260", safe: false, color: "#11151c", wallColor: "#080a0e", enemyName: "Devorador", enemyColor: "#2c3e50", bossName: "Abominável", isBossMap: false, mobLevel: 238, archerMob: true, archerName: "Devorador Arqueiro", archerColor: "#57606f" },
     { id: 17, name: "Ninho do Dragão Ancião", level: "260-300", safe: false, color: "#3d1212", wallColor: "#1f0909", enemyName: "Dragão Vermelho", enemyColor: "#c0392b", bossName: "Ancalagon", isBossMap: true, mobLevel: 280, archerMob: false, bossLevel: 300 },
     { id: 18, name: "Abismo do Vazio", level: "300-330", safe: false, color: "#0c0a0f", wallColor: "#060507", enemyName: "Sombra do Caos", enemyColor: "#111111", bossName: "Espectro Vazio", isBossMap: true, mobLevel: 315, archerMob: true, archerName: "Sombra Arqueira", archerColor: "#2d3436", bossLevel: 330 },
     { id: 19, name: "Trono Supremo", level: "330-350", safe: false, color: "#38331a", wallColor: "#1c190d", enemyName: "Guarda Real", enemyColor: "#f1c40f", bossName: "Lorde Imperador", isBossMap: true, mobLevel: 340, archerMob: true, archerName: "Guarda Arqueiro", archerColor: "#e1b12c", bossLevel: 350 }
@@ -411,9 +891,31 @@ class Utils {
 
 class Pathfinder {
     constructor(grid) { this.grid = grid; }
-    findPath(startX, startY, endX, endY) {
+    findPath(startX, startY, endX, endY, avoidMobs = []) {
         let openList = [];
         let closedList = new Set();
+        let costGrid = [];
+        for (let y = 0; y < MAP_HEIGHT; y++) {
+            costGrid[y] = [];
+            for (let x = 0; x < MAP_WIDTH; x++) costGrid[y][x] = 1;
+        }
+        for (let mob of avoidMobs) {
+            if (!mob.dead) {
+                let mx = Math.floor(mob.px / TILE_SIZE);
+                let my = Math.floor(mob.py / TILE_SIZE);
+                for (let dy = -2; dy <= 2; dy++) {
+                    for (let dx = -2; dx <= 2; dx++) {
+                        let nx = mx + dx, ny = my + dy;
+                        if (nx >= 0 && nx < MAP_WIDTH && ny >= 0 && ny < MAP_HEIGHT) {
+                            let dist = Math.sqrt(dx*dx + dy*dy);
+                            if (dist < 0.5) costGrid[ny][nx] = 999;
+                            else if (dist < 1.5) costGrid[ny][nx] = Math.max(costGrid[ny][nx], 15);
+                            else if (dist < 2.5) costGrid[ny][nx] = Math.max(costGrid[ny][nx], 5);
+                        }
+                    }
+                }
+            }
+        }
         openList.push({ x: startX, y: startY, g: 0, h: 0, f: 0, parent: null });
         const getNeighbors = (node) => {
             let neighbors = [];
@@ -440,7 +942,9 @@ class Pathfinder {
             closedList.add(`${current.x},${current.y}`);
             for (let n of getNeighbors(current)) {
                 if (closedList.has(`${n.x},${n.y}`)) continue;
-                let gCost = current.g + (Math.abs(current.x - n.x) === 1 && Math.abs(current.y - n.y) === 1 ? 1.4 : 1);
+                let baseCost = (Math.abs(current.x - n.x) === 1 && Math.abs(current.y - n.y) === 1 ? 1.4 : 1);
+                let mobPenalty = costGrid[n.y][n.x] || 1;
+                let gCost = current.g + baseCost * mobPenalty;
                 let hCost = Utils.distance(n.x, n.y, endX, endY);
                 let existingNode = openList.find(o => o.x === n.x && o.y === n.y);
                 if (!existingNode || gCost < existingNode.g) {
@@ -463,22 +967,21 @@ class SpriteRenderer {
     }
     drawEntity(ctx, entity, x, y) {
         this.bCtx.clearRect(0, 0, 32, 32);
-        this._drawPuppet(this.bCtx, entity, 16, 16);
+        if (entity.type === 'monster') {
+            this._drawMonster(this.bCtx, entity, 16, 16);
+        } else {
+            this._drawPuppet(this.bCtx, entity, 16, 16);
+        }
         ctx.save();
         ctx.translate(Math.floor(x - 16), Math.floor(y - 16));
         ctx.globalCompositeOperation = 'source-over';
-        let shadowBuffer = document.createElement('canvas');
-        shadowBuffer.width = 32; shadowBuffer.height = 32;
-        let sCtx = shadowBuffer.getContext('2d');
-        sCtx.drawImage(this.buffer, 0, 0);
-        sCtx.globalCompositeOperation = 'source-in';
-        sCtx.fillStyle = '#000';
-        sCtx.fillRect(0, 0, 32, 32);
-        ctx.drawImage(shadowBuffer, 1, 0); ctx.drawImage(shadowBuffer, -1, 0);
-        ctx.drawImage(shadowBuffer, 0, 1); ctx.drawImage(shadowBuffer, 0, -1);
+        // OTIMIZAÇÃO: Sombra simples sem canvas temporário
         if (entity.state === STATE.HIT) {
-            sCtx.fillStyle = '#fff'; sCtx.fillRect(0,0,32,32); ctx.drawImage(shadowBuffer, 0, 0);
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.fillRect(0, 0, 32, 32);
         } else {
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.fillRect(1, 1, 32, 32);
             ctx.drawImage(this.buffer, 0, 0);
         }
         ctx.restore();
@@ -486,8 +989,10 @@ class SpriteRenderer {
     _drawPuppet(ctx, entity, cx, cy) {
         let isDead = entity.state === STATE.DEATH;
         if (isDead) { ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.PI / 2); ctx.translate(-cx, -cy + 10); }
-        let bob = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * 15) * 1.5 : 0;
-        let armBob = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * 15) * 2.5 : 0;
+
+        let walkSpeed = 6;
+        let bob = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * walkSpeed) * 1.0 : 0;
+        let armSwing = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * walkSpeed) * 1.8 : 0;
         let isAttacking = entity.attackAnimTime > 0;
         let attackProgress = isAttacking ? (0.3 - entity.attackAnimTime) / 0.3 : 0;
         let skin = '#fddcbe', mainCol, secCol, wpnCol, hairCol;
@@ -495,9 +1000,9 @@ class SpriteRenderer {
         const isPlayerKind = (entity.type === 'player' || entity.type === 'remote' || entity.type === 'npc');
         if (isPlayerKind) {
             const currentClass = entity.charClass || 'warrior';
-            if (currentClass === 'warrior') { mainCol = '#95a5a6'; secCol = '#2c3e50'; wpnCol = '#bdc3c7'; hairCol = '#d35400'; }
+            if (currentClass === 'warrior') { mainCol = '#7f8c8d'; secCol = '#2c3e50'; wpnCol = '#95a5a6'; hairCol = '#d35400'; }
             else if (currentClass === 'archer') { mainCol = '#27ae60'; secCol = '#1e824c'; wpnCol = '#a0522d'; hairCol = '#e67e22'; }
-            else { mainCol = '#3f51b5'; secCol = '#1a237e'; wpnCol = '#8e44ad'; hairCol = '#9b59b6'; }
+            else { mainCol = '#5c6bc0'; secCol = '#283593'; wpnCol = '#7e57c2'; hairCol = '#ab47bc'; }
         } else {
             skin = entity.color || '#5c9a5c';
             mainCol = '#22110c'; secCol = '#000'; wpnCol = '#777';
@@ -507,103 +1012,490 @@ class SpriteRenderer {
         let isDown = (dir === DIR.S || dir === DIR.SW || dir === DIR.SE);
         let isRight = (dir === DIR.E || dir === DIR.NE || dir === DIR.SE);
         let isLeft = (dir === DIR.W || dir === DIR.NW || dir === DIR.SW);
-        let lookX = isRight ? 2 : isLeft ? -2 : 0;
-        let lookY = isUp ? -2 : isDown ? 2 : 0;
-        let headY = cy - 8 + Math.floor(bob);
+        let lookX = isRight ? 1 : isLeft ? -1 : 0;
+        let lookY = isUp ? -1 : isDown ? 1 : 0;
+
         let bodyY = cy + Math.floor(bob);
-        let legLY = cy + 8, legRY = cy + 8;
-        let legSwing = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * 15) * 3 : 0;
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        let headY = bodyY - 9;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
         ctx.beginPath();
-        ctx.ellipse(cx, cy + 13, 8, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx, cy + 13, 7, 2.5, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = mainCol; ctx.fillRect(cx - 5, bodyY, 10, 8);
-        ctx.fillStyle = secCol; ctx.fillRect(cx - 5, bodyY + 5, 10, 2);
-        ctx.fillStyle = '#111';
-        if (isRight || isLeft) {
-            ctx.fillRect(cx - 3 - legSwing, legLY, 3, 5); ctx.fillRect(cx + 1 + legSwing, legRY, 3, 5);
-        } else {
-            ctx.fillRect(cx - 4, legLY - legSwing, 3, 5); ctx.fillRect(cx + 1, legRY + legSwing, 3, 5);
+
+        // CORREÇÃO: Pernas balançam em oposição aos braços (caminhada natural)
+        let legSwing = (entity.state === STATE.WALK) ? Math.sin(entity.animTime * walkSpeed) * 2.5 : 0;
+        ctx.fillStyle = secCol;
+        let legL_X = cx - 3;
+        let legL_Y = bodyY + 7;
+        if (entity.state === STATE.WALK) {
+            // Perna esquerda balança para TRÁS quando braço esquerdo vai para FRENTE
+            legL_X -= Math.sin(entity.animTime * walkSpeed) * 1.5;
+            legL_Y += Math.abs(Math.cos(entity.animTime * walkSpeed)) * 0.5;
         }
+        ctx.fillRect(legL_X - 1.5, legL_Y, 3, 5);
+        let legR_X = cx + 3;
+        let legR_Y = bodyY + 7;
+        if (entity.state === STATE.WALK) {
+            // Perna direita balança para FRENTE quando braço direito vai para TRÁS
+            legR_X += Math.sin(entity.animTime * walkSpeed) * 1.5;
+            legR_Y += Math.abs(Math.cos(entity.animTime * walkSpeed + Math.PI)) * 0.5;
+        }
+        ctx.fillRect(legR_X - 1.5, legR_Y, 3, 5);
+
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(legL_X - 2, legL_Y + 4, 4, 2);
+        ctx.fillRect(legR_X - 2, legR_Y + 4, 4, 2);
+
+        ctx.fillStyle = mainCol;
+        ctx.fillRect(cx - 4, bodyY - 1, 8, 8);
+        ctx.fillStyle = secCol;
+        ctx.fillRect(cx - 4, bodyY + 5, 8, 2);
+
         if (isPlayerKind) {
             ctx.fillStyle = mainCol;
-            let armLX = cx - 7;
-            let armLY = bodyY + 1 + (isLeft ? -1 : 1);
-            if (entity.state === STATE.WALK) armLY += armBob;
-            ctx.fillRect(armLX, armLY, 2, 4);
+            let shoulderLX = cx - 4;
+            let shoulderLY = bodyY;
+            // CORREÇÃO: Braço esquerdo balança em oposição à perna esquerda
+            let armL_angle = -armSwing * 0.3;
+            if (isLeft) armL_angle += 0.2;
+
+            ctx.save();
+            ctx.translate(shoulderLX, shoulderLY);
+            ctx.rotate(armL_angle);
+            ctx.fillRect(-1, 0, 2, 5);
             ctx.fillStyle = skin;
-            ctx.fillRect(armLX, armLY + 4, 2, 2);
-            ctx.fillStyle = mainCol;
-            let armRX = cx + 5;
-            let armRY = bodyY + 1 + (isRight ? -1 : 1);
-            if (entity.state === STATE.WALK) armRY -= armBob;
+            ctx.fillRect(-1, 5, 2, 2);
+            ctx.restore();
+
+            let shoulderRX = cx + 4;
+            let shoulderRY = bodyY;
+            // CORREÇÃO: Braço direito balança em oposição à perna direita
+            let armR_angle = armSwing * 0.3;
             if (isAttacking) {
-                armRY -= 2;
-                ctx.fillRect(armRX, armRY, 2, 5);
-                ctx.fillStyle = skin;
-                ctx.fillRect(armRX, armRY + 5, 2, 2);
-            } else {
-                ctx.fillRect(armRX, armRY, 2, 4);
-                ctx.fillStyle = skin;
-                ctx.fillRect(armRX, armRY + 4, 2, 2);
+                let attackSwing = Math.sin(attackProgress * Math.PI) * 1.5;
+                armR_angle = -0.8 - attackSwing;
             }
+            if (isRight) armR_angle -= 0.2;
+
+            ctx.save();
+            ctx.translate(shoulderRX, shoulderRY);
+            ctx.rotate(armR_angle);
+            ctx.fillStyle = mainCol;
+            ctx.fillRect(-1, 0, 2, 5);
+            ctx.fillStyle = skin;
+            ctx.fillRect(-1, 5, 2, 2);
+            ctx.restore();
         }
+
         let drawWeapon = () => {
             ctx.save();
-            let handX = cx + (isLeft ? -7 : 7) + lookX;
-            let handY = bodyY + 2 + lookY;
+            let handX = cx + (isLeft ? -5 : 5) + lookX;
+            let handY = bodyY + 5 + lookY;
+            if (isAttacking) handY -= 3;
             ctx.translate(handX, handY);
+
             const currentClass = entity.charClass || 'warrior';
             if (isPlayerKind && currentClass === 'warrior') {
-                let angle = (isLeft ? -0.4 : 0.4);
-                if (entity.isSpinning) { angle = entity.animTime * 25; }
+                let angle = isLeft ? -0.3 : 0.3;
+                if (entity.isSpinning) { angle = entity.animTime * 20; }
                 else if (isAttacking) {
-                    let startAngle = isLeft ? -2.2 : 2.2;
-                    let endAngle = isLeft ? 1.2 : -1.2;
+                    let startAngle = isLeft ? -1.8 : 1.8;
+                    let endAngle = isLeft ? 0.8 : -0.8;
                     let easeOut = 1 - Math.pow(1 - attackProgress, 3);
                     angle = startAngle + (endAngle - startAngle) * easeOut;
                 }
                 ctx.rotate(angle);
-                ctx.fillStyle = '#b8860b'; ctx.fillRect(-1.5, 0, 3, 2);
-                ctx.fillStyle = '#b8860b'; ctx.fillRect(-4, -2, 8, 2);
-                ctx.fillStyle = wpnCol; ctx.fillRect(-1.5, -14, 3, 12);
-                ctx.fillStyle = '#fff'; ctx.fillRect(-0.5, -14, 1, 12);
-                if (!isUp) {
-                    ctx.save(); ctx.translate(-14, 2);
-                    ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-2, -3, 4, 6);
-                    ctx.fillStyle = '#d35400'; ctx.fillRect(-1, -2, 2, 4);
-                    ctx.restore();
-                }
+                ctx.fillStyle = '#b8860b'; ctx.fillRect(-2, -1, 4, 2);
+                ctx.fillStyle = wpnCol; ctx.fillRect(-1, -12, 2, 11);
+                ctx.fillStyle = '#e8e8e8'; ctx.fillRect(-0.5, -11, 1, 9);
+                ctx.fillStyle = '#8b6914'; ctx.fillRect(-1, 1, 2, 3);
             } else if (isPlayerKind && currentClass === 'archer') {
                 ctx.strokeStyle = '#8b4513'; ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(0, 0, 7, -Math.PI / 2, Math.PI / 2); ctx.stroke();
-                ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
-                ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(0, 7); ctx.stroke();
+                ctx.beginPath(); ctx.arc(0, 0, 6, -Math.PI/2, Math.PI/2); ctx.stroke();
+                ctx.strokeStyle = '#c0c0c0'; ctx.lineWidth = 0.5;
+                ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 6); ctx.stroke();
             } else if (isPlayerKind && currentClass === 'mage') {
-                ctx.fillStyle = '#8b4513'; ctx.fillRect(-1, -10, 2, 16);
+                ctx.fillStyle = '#5d4037'; ctx.fillRect(-1, -8, 2, 12);
                 ctx.fillStyle = wpnCol;
-                ctx.beginPath(); ctx.arc(0, -11, 3.5, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, -10, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(-1, -11, 1, 0, Math.PI*2); ctx.fill();
             } else {
                 ctx.fillStyle = '#c0392b';
-                ctx.fillRect(isLeft ? -4 : 2, -2, 2, 4);
+                ctx.fillRect(isLeft ? -3 : 1, -1, 2, 4);
             }
             ctx.restore();
         };
+
         if (isUp) drawWeapon();
-        ctx.fillStyle = skin; ctx.fillRect(cx - 5, headY - 5, 10, 10);
+
+        ctx.fillStyle = skin;
+        ctx.fillRect(cx - 4 + lookX, headY - 4 + lookY, 8, 8);
+
         ctx.fillStyle = hairCol;
-        ctx.fillRect(cx - 6, headY - 6, 12, 4);
-        if (isLeft) ctx.fillRect(cx - 6, headY - 4, 3, 5);
-        if (isRight) ctx.fillRect(cx + 3, headY - 4, 3, 5);
+        ctx.fillRect(cx - 5 + lookX, headY - 5 + lookY, 10, 3);
+        if (isLeft) ctx.fillRect(cx - 5 + lookX, headY - 4 + lookY, 2, 5);
+        if (isRight) ctx.fillRect(cx + 3 + lookX, headY - 4 + lookY, 2, 5);
+
         if (!isUp) {
             ctx.fillStyle = '#000';
             let eyeY = headY + 1 + lookY;
-            if (isRight) { ctx.fillRect(cx + 2, eyeY, 2, 2); }
-            else if (isLeft) { ctx.fillRect(cx - 4, eyeY, 2, 2); }
-            else { ctx.fillRect(cx - 3, eyeY, 1.5, 2); ctx.fillRect(cx + 1.5, eyeY, 1.5, 2); }
+            if (isRight) { ctx.fillRect(cx + 1 + lookX, eyeY, 1.5, 1.5); }
+            else if (isLeft) { ctx.fillRect(cx - 2.5 + lookX, eyeY, 1.5, 1.5); }
+            else { 
+                ctx.fillRect(cx - 2 + lookX, eyeY, 1.5, 1.5); 
+                ctx.fillRect(cx + 0.5 + lookX, eyeY, 1.5, 1.5); 
+            }
         }
+
         if (!isUp) drawWeapon();
+
+        if (entity.state === STATE.HIT) {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.fillRect(cx - 6, bodyY - 6, 12, 18);
+        }
+
         if (isDead) ctx.restore();
+    }
+
+    _drawMonster(ctx, entity, cx, cy) {
+        const name = entity.name || '';
+        const isBoss = entity.isBoss || false;
+        const isArcher = entity.isArcher || false;
+        const color = entity.color || '#5c9a5c';
+        const scale = isBoss ? 1.3 : 1.0;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(scale, scale);
+        ctx.translate(-cx, -cy);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 13, 8, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (name.includes('Barata') || name.includes('Cascuda')) this._drawCockroach(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Coelho') || name.includes('Karnigg')) this._drawRabbit(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Sapo') || name.includes('Cururu')) this._drawFrog(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Goblin') || name.includes('Krill')) this._drawGoblin(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Aranha') || name.includes('Viúva')) this._drawSpider(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Esqueleto') || name.includes('Ossos')) this._drawSkeleton(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Flamejante') || name.includes('Lava')) this._drawFlame(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Yeti') || name.includes('Titã')) this._drawYeti(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Escorpião') || name.includes('Ferrão')) this._drawScorpion(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Gárgula') || name.includes('Patriarca')) this._drawGargoyle(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Wyvern') || name.includes('Tempestade')) this._drawWyvern(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Elfo') || name.includes('Elrond')) this._drawElf(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Invocador') || name.includes('Mortis')) this._drawSummoner(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Devorador') || name.includes('Abominável')) this._drawDevourer(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Dragão') || name.includes('Ancalagon')) this._drawDragon(ctx, cx, cy, color, isBoss);
+        else if (name.includes('Sombra') || name.includes('Espectro')) this._drawShadow(ctx, cx, cy, color, isBoss, isArcher);
+        else if (name.includes('Guarda') || name.includes('Lorde')) this._drawGuard(ctx, cx, cy, color, isBoss, isArcher);
+        else this._drawPuppet(ctx, entity, cx, cy);
+        ctx.restore();
+    }
+    _drawCockroach(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let legAnim = Math.sin(t * 12) * 2;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy, 9, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3d2817'; ctx.beginPath(); ctx.ellipse(cx, cy-2, 6, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(cx-8,cy-2); ctx.lineTo(cx-14+legAnim,cy-6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx+8,cy-2); ctx.lineTo(cx+14-legAnim,cy-6); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx-7,cy+2); ctx.lineTo(cx-13+legAnim,cy+5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx+7,cy+2); ctx.lineTo(cx+13-legAnim,cy+5); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx-6,cy+4); ctx.lineTo(cx-11+legAnim,cy+8); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx+6,cy+4); ctx.lineTo(cx+11-legAnim,cy+8); ctx.stroke();
+        ctx.fillStyle = '#ff3333'; ctx.beginPath(); ctx.arc(cx-3, cy-3, 1.2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+3, cy-3, 1.2, 0, Math.PI*2); ctx.fill();
+        if (isBoss) { ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cy, 12, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawRabbit(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let bounce = Math.abs(Math.sin(t * 4)) * 2;
+        let earWiggle = Math.sin(t * 8) * 0.5;
+        let cyOff = cy - bounce;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cyOff+4, 7, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#f5e6d3'; ctx.beginPath(); ctx.ellipse(cx, cyOff+3, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; 
+        ctx.fillRect(cx-3+earWiggle, cyOff-14, 2.5, 10); 
+        ctx.fillRect(cx+0.5-earWiggle, cyOff-14, 2.5, 10);
+        ctx.fillStyle = '#ffaaaa'; ctx.fillRect(cx-3+earWiggle, cyOff-14, 2.5, 3); ctx.fillRect(cx+0.5-earWiggle, cyOff-14, 2.5, 3);
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cyOff-2, 4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ff9999'; ctx.beginPath(); ctx.ellipse(cx, cyOff+1, 1.5, 1, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-3, 0.8, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-3, 0.8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-3.3, 0.3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-3.3, 0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx+5, cyOff+6+bounce*0.3, 2, 1.5, 0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color;
+        ctx.fillRect(cx-4, cyOff+7, 2, 3+bounce);
+        ctx.fillRect(cx+2, cyOff+7, 2, 3+bounce);
+        if (isBoss) { ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(cx, cyOff-18, 2, 0, Math.PI*2); ctx.fill(); }
+    }
+    _drawFrog(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 3) * 0.8;
+        let blink = Math.sin(t * 2.5) > 0.95;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe*0.3, 9, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.ellipse(cx, cy+4+breathe*0.3, 6, 4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.arc(cx-4, cy-4+breathe*0.2, 3.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+4, cy-4+breathe*0.2, 3.5, 0, Math.PI*2); ctx.fill();
+        if (!blink) {
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-4, cy-4.5+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+4, cy-4.5+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-4, cy-4.5+breathe*0.2, 0.7, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+4, cy-4.5+breathe*0.2, 0.7, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = '#27ae60'; ctx.fillRect(cx-5, cy-5+breathe*0.2, 3, 1); ctx.fillRect(cx+3, cy-5+breathe*0.2, 3, 1);
+        }
+        ctx.fillStyle = color; ctx.fillRect(cx-8, cy+6+breathe*0.5, 4, 3); ctx.fillRect(cx+4, cy+6+breathe*0.5, 4, 3);
+        ctx.fillStyle = '#1e8449'; ctx.fillRect(cx-3, cy+1, 6, 1);
+        if (Math.sin(t * 1.3) > 0.8) {
+            ctx.fillStyle = '#e74c3c'; ctx.fillRect(cx-1, cy+2, 2, 3+Math.sin(t*15)*2);
+        }
+        if (isBoss) { ctx.strokeStyle='#e74c3c'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cy+2, 11, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawGoblin(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 2.5) * 0.5;
+        let armSwing = Math.sin(t * 4) * 1.5;
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.ellipse(cx, cy+3+breathe, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(cx, cy-4+breathe*0.5, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.moveTo(cx-5, cy-6+breathe*0.3); ctx.lineTo(cx-8+Math.sin(t*3)*0.5, cy-12); ctx.lineTo(cx-3, cy-8+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+5, cy-6+breathe*0.3); ctx.lineTo(cx+8-Math.sin(t*3)*0.5, cy-12); ctx.lineTo(cx+3, cy-8+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.ellipse(cx, cy-2+breathe*0.3, 1.5, 2.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(cx, cy+0.5+breathe*0.3, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.3, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.3, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.3, 0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.3, 0.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(cx-5+armSwing, cy+2+breathe, 2, 4); 
+        ctx.fillRect(cx+3-armSwing, cy+2+breathe, 2, 4);
+        ctx.fillStyle = '#1e8449'; ctx.fillRect(cx-3, cy+8+breathe, 2, 4); ctx.fillRect(cx+1, cy+8+breathe, 2, 4);
+        if (isArcher) { ctx.strokeStyle='#8b4513'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(cx+6+armSwing, cy+2, 5, -Math.PI/2, Math.PI/2); ctx.stroke(); }
+        else if (!isBoss) { ctx.fillStyle='#7f8c8d'; ctx.fillRect(cx+4+armSwing*0.5, cy+2, 2, 5); ctx.fillRect(cx+3+armSwing*0.5, cy+1, 4, 1); }
+        if (isBoss) { ctx.fillStyle='#f1c40f'; ctx.fillRect(cx-3, cy-10, 6, 2); ctx.fillRect(cx-1, cy-14, 2, 4); }
+    }
+    _drawSpider(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let legAnim = Math.sin(t * 10) * 1.5;
+        let bodyBounce = Math.abs(Math.sin(t * 3)) * 0.5;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cy+bodyBounce, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#1abc9c'; ctx.beginPath(); ctx.arc(cx, cy+bodyBounce, 3, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth=1.2;
+        for (let i=0; i<4; i++) { 
+            let a=(i/4)*Math.PI*2 + t*0.5; 
+            let legWiggle = Math.sin(t * 8 + i) * 1.5;
+            ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*4, cy+bodyBounce+Math.sin(a)*4); 
+            ctx.lineTo(cx+Math.cos(a)*(10+legWiggle), cy+bodyBounce+Math.sin(a)*(10+legWiggle)); ctx.stroke(); 
+        }
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-1.5, cy-1+bodyBounce, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-1+bodyBounce, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-1+bodyBounce, 0.4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-1+bodyBounce, 0.4, 0, Math.PI*2); ctx.fill();
+        if (isBoss) { ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.arc(cx, cy-8+bodyBounce, 2, 0, Math.PI*2); ctx.fill(); }
+    }
+    _drawSkeleton(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let rattle = Math.sin(t * 8) * 0.3;
+        let jawMove = Math.sin(t * 3) * 0.5;
+        ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.arc(cx+rattle*0.5, cy-4, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5+rattle*0.3, cy-4.5, 0.8, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5+rattle*0.3, cy-4.5, 0.8, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#bdc3c7'; ctx.fillRect(cx-1, cy-8, 2, 3); ctx.fillRect(cx-3, cy-10, 6, 1);
+        ctx.fillStyle = '#ecf0f1'; ctx.fillRect(cx-4+rattle, cy+1, 8, 6); ctx.fillRect(cx-1+rattle*0.5, cy+1, 2, 8);
+        ctx.fillStyle = '#95a5a6'; ctx.fillRect(cx-5+rattle*0.8, cy+2, 2, 5); ctx.fillRect(cx+3+rattle*0.8, cy+2, 2, 5);
+        ctx.fillStyle = '#ecf0f1'; ctx.fillRect(cx-6+rattle, cy+7, 2, 4); ctx.fillRect(cx+4+rattle, cy+7, 2, 4);
+        ctx.fillStyle = '#bdc3c7'; ctx.fillRect(cx-2, cy-1+jawMove, 4, 1);
+        if (isArcher) { ctx.strokeStyle='#8b4513'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx+6+rattle, cy+2, 5, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle='#e0e0e0'; ctx.beginPath(); ctx.moveTo(cx+6+rattle, cy-3); ctx.lineTo(cx+6+rattle, cy+7); ctx.stroke(); }
+        else { ctx.fillStyle='#7f8c8d'; ctx.fillRect(cx+4+rattle, cy+2, 2, 5); ctx.fillRect(cx+3+rattle, cy+1, 4, 1); }
+        if (isBoss) { ctx.fillStyle='#f1c40f'; ctx.beginPath(); ctx.moveTo(cx-5, cy-9); ctx.lineTo(cx, cy-14); ctx.lineTo(cx+5, cy-9); ctx.closePath(); ctx.fill(); }
+    }
+    _drawFlame(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let flicker = Math.sin(t * 8) * 1.5;
+        let flicker2 = Math.sin(t * 12 + 1) * 1;
+        let flicker3 = Math.sin(t * 15 + 2) * 0.8;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(cx-5+flicker*0.3, cy+8); ctx.quadraticCurveTo(cx-8+flicker*0.5, cy, cx-3+flicker*0.2, cy-6); ctx.quadraticCurveTo(cx+flicker, cy-14+flicker2, cx+3-flicker*0.2, cy-6); ctx.quadraticCurveTo(cx+8-flicker*0.5, cy, cx+5-flicker*0.3, cy+8); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f39c12'; ctx.beginPath(); ctx.moveTo(cx-3+flicker2*0.3, cy+6); ctx.quadraticCurveTo(cx-5+flicker2*0.5, cy, cx-2+flicker2*0.2, cy-3); ctx.quadraticCurveTo(cx+flicker2, cy-10+flicker3, cx+2-flicker2*0.2, cy-3); ctx.quadraticCurveTo(cx+5-flicker2*0.5, cy, cx+3-flicker2*0.3, cy+6); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(cx-1.5+flicker3*0.3, cy+4); ctx.quadraticCurveTo(cx-2+flicker3*0.5, cy, cx-0.5+flicker3*0.2, cy-1); ctx.quadraticCurveTo(cx+flicker3, cy-6+flicker2*0.5, cx+0.5-flicker3*0.2, cy-1); ctx.quadraticCurveTo(cx+2-flicker3*0.5, cy, cx+1.5-flicker3*0.3, cy+4); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx+flicker3*0.3, cy-2+flicker2*0.2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-2+flicker*0.2, cy-5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+2-flicker*0.2, cy-4, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,200,50,0.6)'; ctx.beginPath(); ctx.arc(cx+Math.sin(t*5)*3, cy-8+Math.cos(t*7)*2, 0.8, 0, Math.PI*2); ctx.fill();
+        if (isBoss) { ctx.strokeStyle='#e74c3c'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawYeti(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 2) * 1;
+        let armSwing = Math.sin(t * 3) * 2;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe*0.3, 9, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ddd'; ctx.beginPath(); ctx.ellipse(cx, cy+3+breathe*0.3, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cy-5+breathe*0.2, 6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(cx-2, cy-6+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+2, cy-6+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-2, cy-6+breathe*0.2, 0.6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+2, cy-6+breathe*0.2, 0.6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.ellipse(cx, cy-2+breathe*0.1, 2, 1.5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.fillRect(cx-10+armSwing, cy+2+breathe*0.3, 4, 7); ctx.fillRect(cx+6-armSwing, cy+2+breathe*0.3, 4, 7);
+        ctx.fillStyle = '#95a5a6'; ctx.fillRect(cx-11+armSwing, cy+8+breathe*0.3, 3, 3); ctx.fillRect(cx+8-armSwing, cy+8+breathe*0.3, 3, 3);
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(cx, cy-1+breathe*0.5, 2+Math.sin(t*4)*0.5, 0, Math.PI*2); ctx.fill();
+        if (isBoss) { ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.moveTo(cx-4, cy-10); ctx.lineTo(cx, cy-15); ctx.lineTo(cx+4, cy-10); ctx.closePath(); ctx.fill(); }
+    }
+    _drawScorpion(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let tailWiggle = Math.sin(t * 4) * 2;
+        let clawSnap = Math.sin(t * 6) * 1.5;
+        let breathe = Math.sin(t * 2) * 0.3;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe, 7, 5, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.ellipse(cx, cy+1+breathe, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy-4+breathe*0.5, 4, 3, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.5, 0.6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.5, 0.6, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx-3, cy-6+breathe*0.3); ctx.quadraticCurveTo(cx-8+tailWiggle*0.3, cy-10, cx-5+tailWiggle, cy-14); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx+3, cy-6+breathe*0.3); ctx.quadraticCurveTo(cx+8-tailWiggle*0.3, cy-10, cx+5-tailWiggle, cy-14); ctx.stroke();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-5+tailWiggle, cy-14, 1.2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+5-tailWiggle, cy-14, 1.2, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx, cy+3+breathe); ctx.quadraticCurveTo(cx+10+clawSnap, cy-2, cx+8+clawSnap, cy-8); ctx.stroke();
+        ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(cx+8+clawSnap, cy-8, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.fillRect(cx-6, cy+6+breathe, 3, 3); ctx.fillRect(cx+3, cy+6+breathe, 3, 3);
+        if (isBoss) { ctx.strokeStyle='#f1c40f'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cy+2, 11, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawGargoyle(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let wingFlap = Math.sin(t * 3) * 3;
+        let breathe = Math.sin(t * 2) * 0.4;
+        let blink = Math.sin(t * 1.5) > 0.92;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#7f8c8d'; ctx.beginPath(); ctx.arc(cx, cy-4+breathe*0.5, 5, 0, Math.PI*2); ctx.fill();
+        if (!blink) {
+            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.5, 0.7, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.5, 0.7, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = '#7f8c8d'; ctx.fillRect(cx-2.5, cy-5+breathe*0.5, 2, 1); ctx.fillRect(cx+0.5, cy-5+breathe*0.5, 2, 1);
+        }
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.ellipse(cx, cy-2+breathe*0.3, 1, 0.8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#95a5a6'; ctx.beginPath(); ctx.moveTo(cx-6, cy-2+breathe*0.3); ctx.lineTo(cx-14+wingFlap, cy-8); ctx.lineTo(cx-10+wingFlap*0.5, cy+2+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+6, cy-2+breathe*0.3); ctx.lineTo(cx+14-wingFlap, cy-8); ctx.lineTo(cx+10-wingFlap*0.5, cy+2+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#7f8c8d'; ctx.fillRect(cx-3, cy-10+breathe*0.2, 2, 4); ctx.fillRect(cx+1, cy-10+breathe*0.2, 2, 4);
+        ctx.fillStyle = color; ctx.fillRect(cx-7, cy+6+breathe, 3, 4); ctx.fillRect(cx+4, cy+6+breathe, 3, 4);
+        if (isArcher) { ctx.strokeStyle='#2c3e50'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx+7, cy+2, 4, -Math.PI/2, Math.PI/2); ctx.stroke(); }
+        if (isBoss) { ctx.fillStyle='#f1c40f'; ctx.beginPath(); ctx.arc(cx, cy-12+breathe, 2, 0, Math.PI*2); ctx.fill(); }
+    }
+    _drawWyvern(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let wingFlap = Math.sin(t * 4) * 4;
+        let hover = Math.sin(t * 2.5) * 1.5;
+        let tailWag = Math.sin(t * 3) * 2;
+        let cyOff = cy + hover;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cyOff+2, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#74b9ff'; ctx.beginPath(); ctx.arc(cx, cyOff-3, 4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-3.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-3.5, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-3.5, 0.4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-3.5, 0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.moveTo(cx-5, cyOff); ctx.lineTo(cx-16+wingFlap, cyOff-6); ctx.lineTo(cx-10+wingFlap*0.5, cyOff+3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+5, cyOff); ctx.lineTo(cx+16-wingFlap, cyOff-6); ctx.lineTo(cx+10-wingFlap*0.5, cyOff+3); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#3498db'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx, cyOff+5); ctx.quadraticCurveTo(cx+12+tailWag, cyOff+12, cx+8+tailWag*0.5, cyOff+2); ctx.stroke();
+        ctx.fillStyle = '#fff'; for (let i=0; i<3; i++) { ctx.beginPath(); ctx.arc(cx-3+i*3, cyOff-8, 0.6, 0, Math.PI*2); ctx.fill(); }
+        if (Math.sin(t * 8) > 0.5) {
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth=0.5;
+            ctx.beginPath(); ctx.moveTo(cx-8, cyOff-2); ctx.lineTo(cx-12+Math.sin(t*20)*2, cyOff-5); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(cx+8, cyOff-2); ctx.lineTo(cx+12-Math.sin(t*20)*2, cyOff-5); ctx.stroke();
+        }
+        if (isBoss) { ctx.strokeStyle='#f1c40f'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cyOff+2, 13, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawElf(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 2) * 0.4;
+        let earTwitch = Math.sin(t * 5) > 0.95 ? 1 : 0;
+        let armSwing = Math.sin(t * 3) * 1;
+        ctx.fillStyle = '#2d3436'; ctx.beginPath(); ctx.ellipse(cx, cy+3+breathe, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(cx, cy-4+breathe*0.5, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#00b894'; ctx.beginPath(); ctx.moveTo(cx-5, cy-6+breathe*0.3); ctx.lineTo(cx-9-earTwitch, cy-13); ctx.lineTo(cx-2, cy-8+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+5, cy-6+breathe*0.3); ctx.lineTo(cx+9+earTwitch, cy-13); ctx.lineTo(cx+2, cy-8+breathe*0.3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.3, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.3, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.3, 0.4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.3, 0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#636e72'; ctx.fillRect(cx-3+armSwing, cy+8+breathe, 2, 4); ctx.fillRect(cx+1-armSwing, cy+8+breathe, 2, 4);
+        if (isArcher) { ctx.strokeStyle='#8b4513'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(cx+6, cy+2, 5, -Math.PI/2, Math.PI/2); ctx.stroke(); }
+        else { ctx.fillStyle='#8e44ad'; ctx.fillRect(cx-1, cy-10+breathe*0.2, 2, 8); ctx.beginPath(); ctx.arc(cx, cy-11+breathe*0.2, 2, 0, Math.PI*2); ctx.fill(); }
+        if (isBoss) { ctx.fillStyle='#f1c40f'; ctx.fillRect(cx-2, cy-14, 4, 3); }
+    }
+    _drawSummoner(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let float = Math.sin(t * 2) * 1.5;
+        let staffGlow = Math.sin(t * 4) * 0.3 + 0.7;
+        let armFloat = Math.sin(t * 2.5) * 1;
+        let cyOff = cy + float;
+        ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.ellipse(cx, cyOff+3, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#8e44ad'; ctx.beginPath(); ctx.arc(cx, cyOff-4, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-4.5, 1.2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-4.5, 1.2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-1.5, cyOff-4.5, 0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cyOff-4.5, 0.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#9b59b6'; ctx.fillRect(cx-4, cyOff+1, 8, 6); ctx.fillRect(cx-1, cyOff+1, 2, 8);
+        ctx.fillStyle = '#8e44ad'; ctx.fillRect(cx-5+armFloat*0.3, cyOff+2, 2, 5); ctx.fillRect(cx+3-armFloat*0.3, cyOff+2, 2, 5);
+        ctx.fillStyle = '#f39c12'; ctx.fillRect(cx-1+armFloat*0.2, cyOff-12, 2, 10); 
+        ctx.fillStyle = `rgba(231, 76, 60, ${staffGlow})`; ctx.beginPath(); ctx.arc(cx+armFloat*0.2, cyOff-13, 2.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx+armFloat*0.2, cyOff-13, 1.2, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = `rgba(155, 89, 182, ${0.2 + Math.sin(t*3)*0.1})`; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.arc(cx, cyOff+2, 10+Math.sin(t*2), 0, Math.PI*2); ctx.stroke();
+        if (isBoss) { ctx.strokeStyle='#f1c40f'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(cx, cyOff+2, 12, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawDevourer(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 1.5) * 1;
+        let tentacleWiggle = Math.sin(t * 3) * 2;
+        let jawChomp = Math.abs(Math.sin(t * 4)) * 1.5;
+        ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe*0.3, 8, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(cx, cy+3+breathe*0.3, 5, 4, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(cx-4, cy-1+breathe*0.2); ctx.lineTo(cx-2+jawChomp, cy+3); ctx.lineTo(cx-6-jawChomp, cy+3); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+4, cy-1+breathe*0.2); ctx.lineTo(cx+2-jawChomp, cy+3); ctx.lineTo(cx+6+jawChomp, cy+3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-2, cy-2+breathe*0.2, 1.2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+2, cy-2+breathe*0.2, 1.2, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(cx-2, cy-2+breathe*0.2, 0.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+2, cy-2+breathe*0.2, 0.5, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle = '#57606f'; ctx.lineWidth=2;
+        for (let i=0; i<3; i++) { 
+            let a=(i/3)*Math.PI*2+0.5+t*0.3; 
+            ctx.beginPath(); ctx.moveTo(cx+Math.cos(a)*6, cy+Math.sin(a)*6+breathe*0.3); 
+            ctx.quadraticCurveTo(cx+Math.cos(a)*12+tentacleWiggle*Math.sin(i), cy+Math.sin(a)*12, cx+Math.cos(a)*10, cy+Math.sin(a)*16); ctx.stroke(); 
+        }
+        if (isArcher) { ctx.strokeStyle='#57606f'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx+7, cy+2, 4, -Math.PI/2, Math.PI/2); ctx.stroke(); }
+        if (isBoss) { ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.arc(cx, cy-10+breathe, 3, 0, Math.PI*2); ctx.fill(); }
+    }
+    _drawDragon(ctx, cx, cy, color, isBoss) {
+        let t = performance.now() / 1000;
+        let wingFlap = Math.sin(t * 3) * 5;
+        let breathe = Math.sin(t * 2) * 0.8;
+        let tailWag = Math.sin(t * 2.5) * 3;
+        let fireBreath = Math.sin(t * 4) > 0.7;
+        ctx.fillStyle = color; ctx.beginPath(); ctx.ellipse(cx, cy+2+breathe*0.3, 8, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(cx, cy-3+breathe*0.2, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(cx-1.5, cy-3.5+breathe*0.2, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-3.5+breathe*0.2, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-3.5+breathe*0.2, 0.4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-3.5+breathe*0.2, 0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(cx-3, cy-1+breathe*0.2); ctx.lineTo(cx-6, cy+2); ctx.lineTo(cx-1, cy+1); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+3, cy-1+breathe*0.2); ctx.lineTo(cx+6, cy+2); ctx.lineTo(cx+1, cy+1); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#a93226'; ctx.beginPath(); ctx.moveTo(cx-6, cy+breathe*0.3); ctx.lineTo(cx-18+wingFlap*0.5, cy-8); ctx.lineTo(cx-12, cy+2); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx+6, cy+breathe*0.3); ctx.lineTo(cx+18-wingFlap*0.5, cy-8); ctx.lineTo(cx+12, cy+2); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = color; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(cx, cy+6); ctx.quadraticCurveTo(cx+14+tailWag, cy+14, cx+10, cy+4); ctx.stroke();
+        ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(cx-3, cy-8+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+3, cy-8+breathe*0.2, 1.5, 0, Math.PI*2); ctx.fill();
+        if (fireBreath) {
+            ctx.fillStyle = 'rgba(255,100,0,0.6)'; ctx.beginPath(); ctx.arc(cx-5, cy+1, 3+Math.sin(t*10)*2, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,200,0,0.4)'; ctx.beginPath(); ctx.arc(cx-7, cy+2, 2+Math.sin(t*12)*1, 0, Math.PI*2); ctx.fill();
+        }
+        if (isBoss) { ctx.strokeStyle='#ffd700'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx, cy+2, 15, 0, Math.PI*2); ctx.stroke(); }
+    }
+    _drawShadow(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let pulse = 0.8 + Math.sin(t * 3) * 0.2;
+        let drift = Math.sin(t * 1.5) * 2;
+        let eyeGlow = Math.sin(t * 5) * 0.3 + 0.7;
+        ctx.fillStyle = `rgba(17,17,17,${pulse})`; ctx.beginPath(); ctx.ellipse(cx+drift*0.3, cy+2, 7, 8, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#2d3436'; ctx.beginPath(); ctx.arc(cx+drift*0.3, cy-3, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = `rgba(255,255,255,${eyeGlow})`; ctx.beginPath(); ctx.arc(cx-1.5+drift*0.2, cy-3.5, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5+drift*0.2, cy-3.5, 1.5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5+drift*0.2, cy-3.5, 0.6, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5+drift*0.2, cy-3.5, 0.6, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.fillRect(cx-3+drift*0.3, cy+1, 6, 6); ctx.fillRect(cx-1+drift*0.3, cy+1, 2, 8);
+        ctx.fillStyle = '#2d3436'; ctx.fillRect(cx-4+drift*0.3, cy+2, 2, 5); ctx.fillRect(cx+2+drift*0.3, cy+2, 2, 5);
+        ctx.strokeStyle = '#111'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx-5+drift, cy+2); ctx.quadraticCurveTo(cx-12, cy+8, cx-8, cy+12); ctx.stroke(); ctx.beginPath(); ctx.moveTo(cx+5+drift, cy+2); ctx.quadraticCurveTo(cx+12, cy+8, cx+8, cy+12); ctx.stroke();
+        if (isArcher) { ctx.strokeStyle='#2d3436'; ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(cx+7, cy+2, 4, -Math.PI/2, Math.PI*2); ctx.stroke(); }
+        if (isBoss) { ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(cx, cy-10, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx-4, cy-8, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+4, cy-8, 1.5, 0, Math.PI*2); ctx.fill(); }
+    }
+    _drawGuard(ctx, cx, cy, color, isBoss, isArcher) {
+        let t = performance.now() / 1000;
+        let breathe = Math.sin(t * 2) * 0.3;
+        let spearGlow = Math.sin(t * 4) * 0.2;
+        let armSwing = Math.sin(t * 2.5) * 0.5;
+        ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.ellipse(cx, cy+3+breathe, 6, 7, 0, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#f39c12'; ctx.beginPath(); ctx.arc(cx, cy-4+breathe*0.5, 5, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.5, 1, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.5, 1, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(cx-1.5, cy-4.5+breathe*0.5, 0.4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(cx+1.5, cy-4.5+breathe*0.5, 0.4, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#e1b12c'; ctx.fillRect(cx-4, cy+1+breathe, 8, 6); ctx.fillRect(cx-1, cy+1+breathe, 2, 8);
+        ctx.fillStyle = '#f1c40f'; ctx.fillRect(cx-5+armSwing, cy+2+breathe, 2, 5); ctx.fillRect(cx+3-armSwing, cy+2+breathe, 2, 5);
+        ctx.fillStyle = '#fff'; ctx.fillRect(cx-3, cy-10+breathe*0.2, 6, 4); ctx.fillRect(cx-1, cy-14+breathe*0.2, 2, 4);
+        ctx.fillStyle = '#f1c40f'; ctx.fillRect(cx-4, cy-9+breathe*0.2, 8, 2);
+        if (isArcher) { ctx.strokeStyle='#8b4513'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(cx+6, cy+2, 5, -Math.PI/2, Math.PI/2); ctx.stroke(); }
+        else { 
+            ctx.fillStyle = `rgba(189,195,199,${0.8+spearGlow})`; ctx.fillRect(cx-1, cy-4+breathe*0.2, 2, 10); ctx.fillRect(cx-2, cy-6+breathe*0.2, 4, 2); 
+        }
+        if (isBoss) { ctx.fillStyle='#e74c3c'; ctx.beginPath(); ctx.moveTo(cx-3, cy-14); ctx.lineTo(cx, cy-18); ctx.lineTo(cx+3, cy-14); ctx.closePath(); ctx.fill(); }
     }
 }
 
@@ -618,7 +1510,7 @@ class Entity {
         this.animTime = 0;
         this.path = [];
         this.target = null;
-        this.speed = 80; // MAIS LENTO (era 100)
+        this.speed = 55; // MUITO MAIS LENTO (estilo Rucoy calmo)
         this.hp = 100; this.maxHp = 100;
         this.mp = 50; this.maxMp = 50;
         this.dead = false;
@@ -659,15 +1551,23 @@ class Entity {
         }
     }
     processAI(dt, game) {}
-    takeDamage(amount, game, attackerName = "Monstro") {
+    takeDamage(amount, game, attackerName = "Monstro", attackerLevel = null) {
         if (this.dead) return;
+        // SISTEMA DE IMUNIDADE: Mob 5+ níveis abaixo não causa dano
+        if (attackerLevel !== null && this.level - attackerLevel >= LEVEL_DIFF_THRESHOLD) {
+            game.addDamageText(this.px, this.py - 15, "IMUNE", '#888888');
+            game.showToast("Mob muito fraco para te causar dano!");
+            return;
+        }
         this.hp -= amount;
         this.state = STATE.HIT;
         this.animTime = 0;
         game.addDamageText(this.px, this.py - 15, amount, '#ff3333');
+        AudioEngine.playMonsterAttack();
         if (this.hp <= 0) {
             this.hp = 0; this.dead = true; this.state = STATE.DEATH;
             this.path = []; this.target = null;
+            AudioEngine.playDeath();
             this.onDeath(game);
         }
     }
@@ -704,21 +1604,24 @@ class Player extends Entity {
         this.isSpinning = false;
         this.path = []; this.target = null; this.chasing = false;
         if (className === 'warrior') {
-            this.attackRange = TILE_SIZE * 1.3;
-            this.speed = 105; // MAIS LENTO
-            this.attackSpeed = 1.0;
+            // TANK/BERSERKER BUFF: mais alcance, golpe mais rápido, base damage maior
+            this.attackRange = TILE_SIZE * 1.6;
+            this.speed = 62;
+            this.attackSpeed = 1.35;
         } else if (className === 'archer') {
             this.attackRange = TILE_SIZE * 5.5;
-            this.speed = 110; // MAIS LENTO
-            this.attackSpeed = 1.1 + (this.distance * 0.008);
+            this.speed = 68;
+            this.attackSpeed = 1.25 + (this.distance * 0.008);
         } else if (className === 'mage') {
             this.attackRange = TILE_SIZE * 4.5;
-            this.speed = 100; // MAIS LENTO
-            this.attackSpeed = 0.9 + (this.magic * 0.012);
+            this.speed = 62;
+            this.attackSpeed = 1.05 + (this.magic * 0.012);
         }
         this.recalculateStats();
     }
     recalculateStats() {
+        // BUFF DO GUERREIRO (TANK): HP base cresce mais rápido que as outras classes.
+        // Guerreiro recebe x2 no HP base e ganha +dano extra por nível.
         let baseHp = 100 + (this.level * 20);
         let baseMp = 50 + (this.level * 10);
         let baseDmg = 0;
@@ -743,11 +1646,15 @@ class Player extends Entity {
             if (b) { equipHp += (b.hpBonus || 0); equipDmg += (b.dmgBonus || 0); }
         }
 
-        this.maxHp = baseHp + equipHp;
+        // HP base multiplicado por classe (TANK = guerreiro x2)
+        const classHpMult = (this.charClass === 'warrior') ? 2.0 : 1.0;
+        this.maxHp = Math.floor((baseHp * classHpMult) + equipHp);
         this.maxMp = baseMp;
 
         if (this.charClass === 'warrior') {
-            this.damage = 8 + (this.melee * 2.0) + baseDmg + equipDmg;
+            // GUERREIRO BUFF: dano base maior + escala mais forte com melee
+            this.damage = 18 + (this.melee * 3.2) + baseDmg + equipDmg;
+            this.attackSpeed = 1.35 + (this.melee * 0.003);
         } else if (this.charClass === 'archer') {
             this.damage = 6 + (this.distance * 1.8) + baseDmg + equipDmg;
             this.attackSpeed = 1.1 + (this.distance * 0.008);
@@ -804,7 +1711,7 @@ class Player extends Entity {
         } else if (this.target && this.target.dead) { this.target = null; this.chasing = false; }
         if (this.skillCooldown > 0) {
             this.skillCooldown -= dt;
-            document.getElementById('ui-cooldown-overlay').style.height = `${(this.skillCooldown / 7.0) * 100}%`;
+            document.getElementById('ui-cooldown-overlay').style.height = `${(this.skillCooldown / 3.0) * 100}%`;
         } else { document.getElementById('ui-cooldown-overlay').style.height = `0%`; }
     }
     doAttack(game) {
@@ -814,30 +1721,46 @@ class Player extends Entity {
         if (!this.target) return;
         this.dir = Utils.angleToDir(this.target.px - this.px, this.target.py - this.py);
 
-        // BALANCEAMENTO: Se o mob é muito mais forte, dano reduzido
+        // SISTEMA DE IMUNIDADE: Se mob é 5+ níveis acima, não causa dano
+        if (this.target.level - this.level >= LEVEL_DIFF_THRESHOLD) {
+            game.addDamageText(this.target.px, this.target.py - 15, "IMUNE", '#888888');
+            game.showToast("Mob muito forte! Upe para o nível dele para causar dano.");
+            return;
+        }
+        // BALANCEAMENTO: Se o mob é mais forte, dano reduzido
         let damageMultiplier = 1.0;
-        if (this.target.level > this.level + 5) {
-            damageMultiplier = Math.max(0.1, 1.0 - ((this.target.level - this.level) * 0.08));
+        if (this.target.level > this.level) {
+            damageMultiplier = Math.max(0.3, 1.0 - ((this.target.level - this.level) * 0.08));
         }
         let finalDamage = Math.floor(this.damage * damageMultiplier);
 
         if (this.charClass === 'warrior') {
+            AudioEngine.playAttackSwing();
             this.trainStat('melee', 3);
             setTimeout(() => {
                 if (this.target && !this.target.dead && Utils.distance(this.px, this.py, this.target.px, this.target.py) <= this.attackRange * 1.4) {
+                    AudioEngine.playHit();
                     this.target.takeDamage(finalDamage, game, this.name);
                     game.addParticleEffect(this.target.px, this.target.py, '#e74c3c', 12, 0.15, 'fill');
                 }
             }, 100);
         } else if (this.charClass === 'archer') {
+            AudioEngine.playArrowShoot();
             this.trainStat('distance', 3);
             game.addProjectile(this.px, this.py, this.target.px, this.target.py, '#f1c40f', 'arrow', () => {
-                if (this.target && !this.target.dead) this.target.takeDamage(finalDamage, game, this.name);
+                if (this.target && !this.target.dead) {
+                    AudioEngine.playHit();
+                    this.target.takeDamage(finalDamage, game, this.name);
+                }
             });
         } else if (this.charClass === 'mage') {
+            AudioEngine.playMagicCast();
             this.trainStat('magic', 4);
             game.addProjectile(this.px, this.py, this.target.px, this.target.py, '#9b59b6', 'orb', () => {
-                if (this.target && !this.target.dead) this.target.takeDamage(finalDamage, game, this.name);
+                if (this.target && !this.target.dead) {
+                    AudioEngine.playHit();
+                    this.target.takeDamage(finalDamage, game, this.name);
+                }
             });
         }
         game.syncWithDatabase();
@@ -882,19 +1805,21 @@ class Player extends Entity {
         }
         game.updateUI();
         game.syncWithDatabase();
+        updateLocalCharacterSave();
     }
     castSkill(game, tx, ty) {
         if (this.skillCooldown > 0 || this.mp < 20 || this.dead || game.currentMap.safe) return;
         this.mp -= 20;
-        this.skillCooldown = 7.0;
+        this.skillCooldown = 3.0;
         game.updateUI();
         if (this.charClass === 'warrior') {
-            this.isSpinning = true; this.spinTimer = 3.5; this.spinTick = 0; this.attackAnimTime = 3.5;
+            this.attackAnimTime = 2.0;
+            game.activeSkills.push(new WarriorBladeStorm(this));
         } else if (this.charClass === 'mage') {
-            game.activeSkills.push(new MageMeteorShower(tx, ty, this.damage * 2.2));
+            game.activeSkills.push(new MageMeteorShower(tx, ty, this.damage * 3.2));
             this.dir = Utils.angleToDir(tx - this.px, ty - this.py); this.attackAnimTime = 0.4;
         } else if (this.charClass === 'archer') {
-            game.activeSkills.push(new ArcherVolley(this.px, this.py, tx, ty, this.damage * 1.8));
+            game.activeSkills.push(new ArcherVolley(this.px, this.py, tx, ty, this.damage * 2.5));
             this.dir = Utils.angleToDir(tx - this.px, ty - this.py); this.attackAnimTime = 0.4;
         }
         game.syncWithDatabase();
@@ -902,6 +1827,7 @@ class Player extends Entity {
     onDeath(game) {
         const lostKp = Math.floor(this.kp * 0.1);
         if (lostKp > 0) { this.kp -= lostKp; game.showToast(`Você morreu e perdeu 💰 ${lostKp} KP!`); }
+        updateLocalCharacterSave();
         setTimeout(() => {
             this.dead = false; this.hp = this.maxHp; this.mp = this.maxMp; this.state = STATE.IDLE;
             game.changeMap(0, true);
@@ -919,12 +1845,12 @@ class Monster extends Entity {
         this.maxHp = data.hp;
         this.hp = data.hp;
         this.speed = data.speed;
-        this.damage = data.damage;
+        this.damage = Math.floor(data.damage * 0.75);
         this.xpValue = data.xp;
         this.isBoss = data.isBoss || false;
         this.isArcher = data.isArcher || false;
         this.spawnX = x; this.spawnY = y;
-        this.aggroRange = TILE_SIZE * 5.5;
+        this.aggroRange = TILE_SIZE * 4.2;
         this.attackRange = this.isBoss ? TILE_SIZE * 2 : (this.isArcher ? TILE_SIZE * 5 : TILE_SIZE * 1.4);
         this.kiteRange = this.isArcher ? TILE_SIZE * 3.5 : 0;
         this.kiting = false;
@@ -992,7 +1918,7 @@ class Monster extends Entity {
                     if (this.isArcher) {
                         game.addProjectile(this.px, this.py, this.target.px, this.target.py, this.color, 'arrow', () => {
                             if (this.target && !this.target.dead && Utils.distance(this.px, this.py, this.target.px, this.target.py) < this.attackRange * 2) {
-                                this.target.takeDamage(this.damage, game, this.name);
+                                this.target.takeDamage(this.damage, game, this.name, this.level);
                             }
                         });
                     } else {
@@ -1003,7 +1929,7 @@ class Monster extends Entity {
                         }, 150);
                     }
                 }
-            } else if (Math.random() < 0.1 || this.path.length === 0) {
+            } else if (Math.random() < 0.05 || this.path.length === 0) { // OTIMIZAÇÃO: Menos frequente
                 let tX = Math.floor(this.target.px/TILE_SIZE), tY = Math.floor(this.target.py/TILE_SIZE);
                 let mX = Math.floor(this.px/TILE_SIZE), mY = Math.floor(this.py/TILE_SIZE);
                 this.path = game.pathfinder.findPath(mX, mY, tX, tY);
@@ -1012,10 +1938,17 @@ class Monster extends Entity {
     }
     takeDamage(amount, game, attackerName) {
         if (this.dead) return;
+        // SISTEMA DE IMUNIDADE: Player não causa dano em mob 5+ níveis acima
+        if (game.player && this.level - game.player.level >= LEVEL_DIFF_THRESHOLD) {
+            game.addDamageText(this.px, this.py - 15, "IMUNE", '#888888');
+            game.showToast("Mob muito forte! Upe para o nível dele para causar dano.");
+            return;
+        }
         this.hp -= amount;
         this.state = STATE.HIT;
         this.animTime = 0;
         game.addDamageText(this.px, this.py - 15, amount, '#ff3333');
+        AudioEngine.playMonsterHit();
 
         // Rastrear dano para bosses
         if (this.isBoss && attackerName) {
@@ -1026,6 +1959,7 @@ class Monster extends Entity {
         if (this.hp <= 0) {
             this.hp = 0; this.dead = true; this.state = STATE.DEATH;
             this.path = []; this.target = null;
+            AudioEngine.playMonsterDeath();
             this.onDeath(game);
         }
     }
@@ -1048,6 +1982,7 @@ class Monster extends Entity {
         let droppedItem = null;
 
         if (this.isBoss) {
+            AudioEngine.playBossRoar();
             // Boss: Verificar se player causou 10% de dano
             let totalDamage = Object.values(this.damageTakenBy).reduce((a, b) => a + b, 0);
             let playerDamage = this.damageTakenBy[game.player.name] || 0;
@@ -1093,6 +2028,7 @@ class Monster extends Entity {
         }
 
         if (droppedItem) {
+            AudioEngine.playItemDrop();
             game.addItemToInventory(droppedItem);
             game.showToast(`Drop: ${droppedItem.name}!`);
         }
@@ -1117,18 +2053,18 @@ class VillageNPC extends Entity {
 class MageMeteorShower {
     constructor(tx, ty, damage) {
         this.tx = tx; this.ty = ty; this.damage = damage;
-        this.duration = 3.5; this.timer = 0; this.tickTimer = 0; this.done = false;
+        this.duration = 4.0; this.timer = 0; this.tickTimer = 0; this.done = false;
     }
     update(dt, game) {
         this.timer += dt; this.tickTimer += dt;
-        game.addParticleEffect(this.tx, this.ty, 'rgba(155, 89, 182, 0.08)', TILE_SIZE * 3.2, 0.1, 'fill');
-        if (this.tickTimer > 0.25) {
+        // OTIMIZAÇÃO: Partículas de área reduzidas
+        if (this.tickTimer > 0.4) {
             this.tickTimer = 0;
-            for (let i = 0; i < 3; i++) {
+            // Apenas 2 partículas por tick em vez de 6
+            for (let i = 0; i < 2; i++) {
                 let rx = this.tx + (Math.random() * 80 - 40);
                 let ry = this.ty + (Math.random() * 80 - 40);
-                game.addParticleEffect(rx, ry, '#e74c3c', 16, 0.3, 'fill');
-                game.addParticleEffect(rx, ry, '#9b59b6', 8, 0.2, 'fill');
+                game.addParticleEffect(rx, ry, '#e74c3c', 12, 0.25, 'fill');
             }
             for (let m of game.monsters) {
                 if (!m.dead && Utils.distance(this.tx, this.ty, m.px, m.py) < TILE_SIZE * 3.2) {
@@ -1149,8 +2085,8 @@ class ArcherVolley {
         if (!this.fired) {
             this.fired = true;
             let baseAngle = Math.atan2(this.ty - this.sy, this.tx - this.sx);
-            for (let i = -2; i <= 2; i++) {
-                let angle = baseAngle + (i * 0.15);
+            for (let i = -3; i <= 3; i++) {
+                let angle = baseAngle + (i * 0.12);
                 let dist = 240;
                 let targetX = this.sx + Math.cos(angle) * dist;
                 let targetY = this.sy + Math.sin(angle) * dist;
@@ -1164,6 +2100,47 @@ class ArcherVolley {
             }
             this.done = true;
         }
+    }
+}
+
+class WarriorBladeStorm {
+    constructor(player) {
+        this.player = player;
+        this.duration = 2.0;
+        this.timer = 0;
+        this.tickTimer = 0;
+        this.done = false;
+        this.sliceCount = 0;
+    }
+    update(dt, game) {
+        this.timer += dt;
+        this.tickTimer += dt;
+        if (this.tickTimer > 0.5) {
+            this.tickTimer = 0;
+            this.sliceCount++;
+            let angle = this.sliceCount * 1.2;
+            let r = TILE_SIZE * 2.8;
+            // OTIMIZAÇÃO: Apenas 4 partículas em vez de 12
+            for (let i = 0; i < 4; i++) {
+                let a = angle + (i / 4) * Math.PI * 2;
+                let px = this.player.px + Math.cos(a) * (r * 0.6);
+                let py = this.player.py + Math.sin(a) * (r * 0.6);
+                game.addParticleEffect(px, py, '#ff3333', 14, 0.2, 'stroke');
+            }
+            for (let m of game.monsters) {
+                if (!m.dead && Utils.distance(this.player.px, this.player.py, m.px, m.py) < TILE_SIZE * 2.8) {
+                    let damageMultiplier = 1.0;
+                    if (m.level > this.player.level + 5) {
+                        damageMultiplier = Math.max(0.1, 1.0 - ((m.level - this.player.level) * 0.08));
+                    }
+                    let tickDamage = Math.floor(this.player.damage * 0.5 * damageMultiplier);
+                    if (tickDamage < 1) tickDamage = 1;
+                    m.takeDamage(tickDamage, game, this.player.name);
+                    this.player.trainStat('melee', 2);
+                }
+            }
+        }
+        if (this.timer >= this.duration) this.done = true;
     }
 }
 
@@ -1197,6 +2174,8 @@ class Game {
     startWithCharacter(charData) {
         activeCharacter = charData;
         this.player = new Player(Math.floor(MAP_WIDTH/2), Math.floor(MAP_HEIGHT/2), charData.name, charData.charClass);
+        this.player.hp = this.player.maxHp;
+        this.player.mp = this.player.maxMp;
         this.player.level = charData.level || 1;
         this.player.xp = charData.xp || 0;
         this.player.maxXp = charData.maxXp || 100;
@@ -1300,9 +2279,10 @@ class Game {
         this.syncWithDatabase();
     }
     spawnMonstersForMap() {
+        if (this.currentMap.safe) return;
         const mapData = this.currentMap;
         const mobLevel = mapData.mobLevel || 1;
-        let count = mapData.isBossMap ? 8 : 18; // MAIS MOBS
+        let count = mapData.isBossMap ? 6 : 12; // OTIMIZAÇÃO: Menos mobs para melhor performance
 
         // Spawn mobs normais
         for (let i = 0; i < count; i++) {
@@ -1314,16 +2294,16 @@ class Game {
                     color: mapData.enemyColor,
                     level: mobLevel + Math.floor(Math.random() * 3),
                     hp: 60 + (mobLevel * 15),
-                    speed: 55 + (mobLevel * 0.5), // MAIS LENTO
-                    damage: 10 + (mobLevel * 2.5),
+                    speed: 38 + (mobLevel * 0.3), // MUITO MAIS LENTO (estilo Rucoy)
+                    damage: 7 + (mobLevel * 1.8),
                     xp: 20 + (mobLevel * 5),
                     isBoss: false,
                     isArcher: false
                 };
                 // BALANCEAMENTO: Mobs muito mais fortes que o player causam mais dano
                 if (mobData.level > this.player.level + 10) {
-                    mobData.damage *= 1.5;
-                    mobData.hp *= 1.3;
+                    mobData.damage *= 1.2;
+                    mobData.hp *= 1.15;
                 }
                 this.monsters.push(new Monster(x, y, mobData));
             }
@@ -1331,7 +2311,7 @@ class Game {
 
         // Spawn arqueiros se o mapa tiver
         if (mapData.archerMob) {
-            for (let i = 0; i < 6; i++) {
+            for (let i = 0; i < 4; i++) { // OTIMIZAÇÃO: Menos arqueiros
                 let x = Math.floor(Math.random() * (MAP_WIDTH-2)) + 1;
                 let y = Math.floor(Math.random() * (MAP_HEIGHT-2)) + 1;
                 if (this.grid[y][x] === 0 && Utils.distance(x, y, this.player.x, this.player.y) > 8) {
@@ -1340,8 +2320,8 @@ class Game {
                         color: mapData.archerColor,
                         level: mobLevel + Math.floor(Math.random() * 3),
                         hp: 40 + (mobLevel * 12),
-                        speed: 60 + (mobLevel * 0.6), // MAIS LENTO
-                        damage: 8 + (mobLevel * 2),
+                        speed: 42 + (mobLevel * 0.35), // MUITO MAIS LENTO (estilo Rucoy)
+                        damage: 5 + (mobLevel * 1.4),
                         xp: 18 + (mobLevel * 4),
                         isBoss: false,
                         isArcher: true
@@ -1362,7 +2342,7 @@ class Game {
                     color: '#ff0000',
                     level: bossInfo.level,
                     hp: bossInfo.hp,
-                    speed: 45, // Boss lento
+                    speed: 32, // Boss muito lento (estilo Rucoy)
                     damage: bossInfo.damage,
                     xp: bossInfo.xp,
                     isBoss: true,
@@ -1471,6 +2451,7 @@ class Game {
         this.player.setClass(className);
         this.showToast(`Mudou para Classe: ${className.toUpperCase()}`);
         this.updateUI();
+        updateLocalCharacterSave();
     }
     prepareSkill() {
         if (this.player.skillCooldown > 0 || this.player.mp < 20) return;
@@ -1511,11 +2492,21 @@ class Game {
         updateInventoryUI();
         this.syncWithDatabase();
     }
-    addDamageText(x, y, amount, color) { this.texts.push({ x, y, text: amount.toString(), time: 1.0, maxTime: 1.0, color }); }
+    addDamageText(x, y, amount, color) {
+        // OTIMIZAÇÃO: Limitar textos de dano simultâneos
+        if (this.texts.length > 20) {
+            this.texts.splice(0, this.texts.length - 20);
+        }
+        this.texts.push({ x, y, text: amount.toString(), time: 1.0, maxTime: 1.0, color });
+    }
     addProjectile(sx, sy, tx, ty, color, visualType, onImpact) {
         this.projectiles.push({ x: sx, y: sy, tx: tx, ty: ty, color, visualType, speed: 450, onImpact });
     }
     addParticleEffect(x, y, color, radius, duration, style = 'stroke') {
+        // OTIMIZAÇÃO: Limitar número de partículas para evitar lag
+        if (this.particles.length > 50) {
+            this.particles.splice(0, this.particles.length - 50);
+        }
         this.particles.push({ x, y, color, r: 0, maxR: radius, time: duration, maxTime: duration, style });
     }
     showToast(message) {
@@ -1525,6 +2516,11 @@ class Game {
         setTimeout(() => { toast.style.opacity = '0'; }, 2200);
     }
     updateUI() {
+        // OTIMIZAÇÃO: Throttle para evitar atualizações excessivas
+        const now = performance.now();
+        if (this._lastUIUpdate && now - this._lastUIUpdate < 100) return;
+        this._lastUIUpdate = now;
+
         let hpPerc = (this.player.hp / this.player.maxHp) * 100;
         let mpPerc = (this.player.mp / this.player.maxMp) * 100;
         let xpPerc = (this.player.xp / this.player.maxXp) * 100;
@@ -1550,6 +2546,10 @@ class Game {
     }
     syncWithDatabase() {
         if (!databaseOnline || !activeCharacter) return;
+        // OTIMIZAÇÃO: Throttle sync para evitar writes excessivos
+        const now = performance.now();
+        if (this._lastSync && now - this._lastSync < 2000) return;
+        this._lastSync = now;
         const charRef = db.collection('artifacts').doc(appId).collection('users').doc(activeCharacter.id).collection('data').doc('profile');
         charRef.set({
             name: this.player.name, charClass: this.player.charClass, level: this.player.level,
@@ -1559,10 +2559,16 @@ class Game {
             mapId: this.currentMapId, px: this.player.px, py: this.player.py,
             state: this.player.state, dir: this.player.dir, isSpinning: this.player.isSpinning,
             lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).catch(err => console.error("Erro ao sincronizar: ", err));
+        }, { merge: true }).then(() => {
+            updateLocalCharacterSave();
+        }).catch(err => console.error("Erro ao sincronizar: ", err));
     }
     initMultiplayerListener() {
         if (!databaseOnline || !activeCharacter) return;
+        // OTIMIZAÇÃO: Multiplayer desativado por padrão para economizar reads
+        // Descomente a linha abaixo para reativar
+        return;
+        /*
         const playersQuery = db.collection('artifacts').doc(appId).collection('users');
         playersQuery.onSnapshot(snapshot => {
             snapshot.docChanges().forEach(change => {
@@ -1583,9 +2589,28 @@ class Game {
                 });
             });
         }, error => { console.warn("Erro multiplayer", error); });
+        */
     }
     update(dt) {
+        // MP regenera normalmente
         if (this.player.mp < this.player.maxMp && !this.player.dead) { this.player.mp += dt * 3; this.updateUI(); }
+        // HP NÃO regenera sozinha de tempos em tempos — mas existe uma regen passiva LEVE
+        // que escala com o maxHp: quanto mais vida máxima você tem, mais rápido regenera.
+        // Guerreiro (TANK) tem maxHp x2, então se beneficia muito mais dessa regen.
+        // OTIMIZAÇÃO: Regeneração a cada 0.5s em vez de todo frame
+        this._regenTimer = (this._regenTimer || 0) + dt;
+        if (this._regenTimer > 0.5) {
+            this._regenTimer = 0;
+            if (!this.player.dead && this.player.hp < this.player.maxHp) {
+                const regenRate = (this.player.maxHp * 0.008) + 2.0;
+                this.player.hp = Math.min(this.player.maxHp, this.player.hp + regenRate * 0.5);
+            }
+            if (!this.player.dead && this.player.mp < this.player.maxMp) {
+                const regenRate = (this.player.maxMp * 0.012) + 1.5;
+                this.player.mp = Math.min(this.player.maxMp, this.player.mp + regenRate * 0.5);
+            }
+            this.updateUI();
+        }
         this.player.update(dt, this);
         for (let m of this.monsters) m.update(dt, this);
         for (let n of this.npcs) {
@@ -1828,10 +2853,30 @@ async function confirmCharacterCreation() {
     nameInput.value = "";
 }
 function saveCharactersList() {
-    localStorage.setItem('rucoy_local_characters', JSON.stringify(savedCharacters));
+    localStorage.setItem('lunaris_odyssey_characters', JSON.stringify(savedCharacters));
+}
+function updateLocalCharacterSave() {
+    if (!activeCharacter || typeof game === 'undefined' || !game || !game.player) return;
+    const charIndex = savedCharacters.findIndex(c => c.id === activeCharacter.id);
+    if (charIndex === -1) return;
+    savedCharacters[charIndex] = {
+        ...savedCharacters[charIndex],
+        level: game.player.level,
+        xp: game.player.xp,
+        maxXp: game.player.maxXp,
+        kp: game.player.kp,
+        melee: game.player.melee,
+        distance: game.player.distance,
+        magic: game.player.magic,
+        equipped: JSON.parse(JSON.stringify(game.player.equipped)),
+        inventory: JSON.parse(JSON.stringify(game.player.inventory)),
+        charClass: game.player.charClass,
+        name: game.player.name
+    };
+    saveCharactersList();
 }
 function loadLocalCharacters() {
-    const raw = localStorage.getItem('rucoy_local_characters');
+    const raw = localStorage.getItem('lunaris_odyssey_characters');
     if (raw) savedCharacters = JSON.parse(raw);
     else savedCharacters = [];
 }
@@ -1893,7 +2938,7 @@ function updateInventoryUI() {
             const item = getItemById(equippedId);
             if (item) {
                 el.innerHTML = `
-                    <span class="text-lg">${item.icon}</span>
+                    <div class="sprite-wrap"><div class="slot-icon">${itemIconHTML(item)}</div></div>
                     <span class="text-[7px] text-slate-300 font-bold truncate max-w-full px-1">${item.name}</span>
                 `;
                 el.className = `aspect-square rounded-lg bg-slate-950 border-2 rarity-${item.rarity} flex flex-col items-center justify-center cursor-pointer hover:brightness-110 transition`;
@@ -1901,9 +2946,7 @@ function updateInventoryUI() {
                 totalDmgBonus += (item.dmgBonus || 0);
             }
         } else {
-            let defaultIcons = { helmet: "🪖", armor: "🛡️", gloves: "🧤", weapon: "⚔️", legs: "👖", boots: "👢", bag: "🎒" };
-            let defaultNames = { helmet: "Capacete", armor: "Armadura", gloves: "Luvas", weapon: "Arma", legs: "Calça", boots: "Botas", bag: "Bag" };
-            el.innerHTML = `<span class="text-lg">${defaultIcons[slot]}</span><span class="text-[7px] text-slate-500">${defaultNames[slot]}</span>`;
+            el.innerHTML = emptySlotIcon(slot);
             el.className = "aspect-square rounded-lg bg-slate-950 border-2 border-slate-700 flex flex-col items-center justify-center cursor-pointer hover:border-slate-500 transition";
         }
     }
@@ -1924,7 +2967,7 @@ function updateInventoryUI() {
         slot.className = `relative aspect-square rounded-lg flex flex-col items-center justify-center border-2 p-1 bg-slate-950 text-center cursor-pointer transition active:scale-95 rarity-${rarity}`;
 
         slot.innerHTML = `
-            <span class="text-xl">${icon}</span>
+            <div class="sprite-wrap" style="height:60%;width:100%;">${itemIconHTML(itemData, { size: '100%' })}</div>
             <span class="text-[7px] text-slate-300 font-bold truncate max-w-full px-1">${item.name}</span>
             ${item.count ? `<span class="absolute top-1 right-1 bg-slate-800 text-slate-200 text-[8px] font-bold px-1 rounded-full">${item.count}</span>` : ''}
         `;
@@ -1954,6 +2997,7 @@ function unequipItem(slot) {
     updateInventoryUI();
     game.updateUI();
     game.syncWithDatabase();
+    updateLocalCharacterSave();
 }
 
 function handleItemInteraction(item, index) {
@@ -1966,22 +3010,33 @@ function handleItemInteraction(item, index) {
 
     if (item.type === 'potion') {
         if (item.effect === 'heal_hp') {
-            game.player.hp = Math.min(game.player.maxHp, game.player.hp + item.amount);
-            game.addDamageText(game.player.px, game.player.py - 20, `+${item.amount} HP`, '#2ecc71');
+            // Poção de HP escala com maxHp: quanto mais vida máxima, mais cura.
+            const baseAmount = item.amount || 50;
+            const maxHpFactor = game.player.maxHp * 0.10; // 10% do maxHp como bônus
+            const totalHeal = Math.floor(baseAmount + maxHpFactor);
+            const realHeal = Math.min(game.player.maxHp - game.player.hp, totalHeal);
+            game.player.hp = Math.min(game.player.maxHp, game.player.hp + totalHeal);
+            game.addDamageText(game.player.px, game.player.py - 20, `+${realHeal} HP`, '#2ecc71');
         } else {
-            game.player.mp = Math.min(game.player.maxMp, game.player.mp + item.amount);
-            game.addDamageText(game.player.px, game.player.py - 20, `+${item.amount} MP`, '#3498db');
+            // Poção de MP também escala com maxMp
+            const baseAmount = item.amount || 25;
+            const maxMpFactor = game.player.maxMp * 0.15;
+            const totalHeal = Math.floor(baseAmount + maxMpFactor);
+            const realHeal = Math.min(game.player.maxMp - game.player.mp, totalHeal);
+            game.player.mp = Math.min(game.player.maxMp, game.player.mp + totalHeal);
+            game.addDamageText(game.player.px, game.player.py - 20, `+${realHeal} MP`, '#3498db');
         }
         item.count--;
         if (item.count <= 0) game.player.inventory.splice(index, 1);
-    } else if (item.type === 'weapon') {
-        if (item.class !== 'all' && item.class !== game.player.charClass) {
+    } else if (item.type === 'weapon' || (item.class && ['warrior', 'archer', 'mage'].includes(item.class) && !item.slot)) {
+        // É uma arma (verifica tanto type quanto class)
+        if (item.class && item.class !== 'all' && item.class !== game.player.charClass) {
             showCustomModal("Restrição de Classe", `Esta arma exige a classe dos ${item.class.toUpperCase()}S!`);
             return;
         }
         // Equipar arma
         if (game.player.equipped.weapon) {
-            game.player.inventory.push({ ...getItemById(game.player.equipped.weapon), count: 1 });
+            game.player.equipped.weapon && game.player.inventory.push({ ...getItemById(game.player.equipped.weapon), count: 1 });
         }
         game.player.equipped.weapon = item.id;
         game.player.inventory.splice(index, 1);
@@ -1996,11 +3051,14 @@ function handleItemInteraction(item, index) {
         game.player.inventory.splice(index, 1);
         game.showToast(`${item.name} equipado!`);
         game.player.recalculateStats();
+    } else {
+        showCustomModal("Item desconhecido", "Este item não pode ser equipado.");
     }
 
     updateInventoryUI();
     game.updateUI();
     game.syncWithDatabase();
+    updateLocalCharacterSave();
 }
 
 function sellItem(item, index) {
@@ -2016,6 +3074,7 @@ function sellItem(item, index) {
     updateShopUI();
     game.updateUI();
     game.syncWithDatabase();
+    updateLocalCharacterSave();
 }
 
 // ===== LOJA =====
@@ -2042,9 +3101,12 @@ function updateShopUI() {
         const icon = prod.icon || (prod.type === 'potion' ? prod.icon : "📦");
         const rarity = prod.rarity || ITEM_RARITY.COMMON;
         row.className = `flex justify-between items-center bg-slate-950 p-2.5 rounded border border-slate-800 text-xs rarity-${rarity}`;
+        const productData = getItemById(prod.id) || prod;
+        // Todas as poções e itens têm sprite procedural agora (sem fallback emoji)
+        const spriteHtml = `<div style="width:36px;height:36px;display:flex;align-items:center;justify-content:center;">${itemIconHTML(productData, { size: '36px' })}</div>`;
         row.innerHTML = `
             <div class="flex items-center gap-2">
-                <span class="text-xl">${icon}</span>
+                ${spriteHtml}
                 <div class="text-left">
                     <div class="font-bold text-slate-100">${prod.name}</div>
                     <div class="text-[9px] text-slate-400">Preço: 💰 ${prod.price} KP | Nv.${prod.level || 1}</div>
@@ -2080,6 +3142,7 @@ function buyProduct(prod) {
     game.showToast(`Você comprou: ${prod.name}!`);
     game.updateUI();
     updateShopUI();
+    updateLocalCharacterSave();
 }
 
 function showCustomModal(title, text) {
@@ -2105,5 +3168,89 @@ window.onload = () => {
     game = new Game();
 };
 </script>
-</body>
+<script>
+    // ===== SISTEMA DE AUDIO =====
+    const AudioEngine = {
+        ctx: null,
+        masterGain: null,
+        initialized: false,
+        init() {
+            if (this.initialized) return;
+            try {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.masterGain = this.ctx.createGain();
+                this.masterGain.gain.value = 0.4;
+                this.masterGain.connect(this.ctx.destination);
+                this.initialized = true;
+            } catch(e) { console.warn('Audio não suportado'); }
+        },
+        playTone(freq, duration, type='sine', volume=0.3, slideTo=null) {
+            if (!this.initialized) this.init();
+            if (!this.ctx) return;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            if (slideTo) {
+                osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+            }
+            gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        },
+        playNoise(duration, volume=0.2, filterFreq=1000) {
+            if (!this.initialized) this.init();
+            if (!this.ctx) return;
+            const bufferSize = this.ctx.sampleRate * duration;
+            const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+            const source = this.ctx.createBufferSource();
+            source.buffer = buffer;
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = filterFreq;
+            const gain = this.ctx.createGain();
+            gain.gain.setValueAtTime(volume, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
+            source.connect(filter);
+            filter.connect(gain);
+            gain.connect(this.masterGain);
+            source.start();
+        },
+        playHit() { this.playTone(200, 0.1, 'square', 0.15, 80); },
+        playAttackSwing() { this.playTone(400, 0.15, 'sawtooth', 0.1, 100); },
+        playArrowShoot() { this.playTone(800, 0.1, 'sawtooth', 0.08, 1200); },
+        playMagicCast() { this.playTone(300, 0.3, 'sine', 0.2, 600); setTimeout(() => this.playTone(500, 0.2, 'sine', 0.15), 100); },
+        playBladeStorm() { 
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => this.playTone(150 + i * 30, 0.2, 'sawtooth', 0.12, 50), i * 120);
+            }
+        },
+        playMeteorImpact() { this.playNoise(0.3, 0.25, 300); this.playTone(80, 0.4, 'sine', 0.2); },
+        playVolley() { for (let i = 0; i < 7; i++) setTimeout(() => this.playArrowShoot(), i * 60); },
+        playLevelUp() {
+            [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => this.playTone(f, 0.3, 'sine', 0.2), i * 150));
+        },
+        playDeath() { this.playTone(150, 0.5, 'sawtooth', 0.2, 30); this.playNoise(0.4, 0.15, 200); },
+        playStep() { this.playNoise(0.05, 0.05, 800); },
+        playItemDrop() { this.playTone(600, 0.1, 'sine', 0.1); setTimeout(() => this.playTone(800, 0.15, 'sine', 0.1), 80); },
+        playEquip() { this.playTone(440, 0.1, 'sine', 0.1); setTimeout(() => this.playTone(660, 0.15, 'sine', 0.1), 100); },
+        playBuySell() { this.playTone(500, 0.08, 'sine', 0.1); setTimeout(() => this.playTone(700, 0.1, 'sine', 0.1), 60); },
+        playBossRoar() { 
+            this.playNoise(0.6, 0.3, 150); 
+            this.playTone(80, 0.5, 'sawtooth', 0.25, 40);
+            setTimeout(() => this.playTone(60, 0.4, 'sawtooth', 0.2), 200);
+        },
+        playMonsterHit() { this.playTone(180, 0.08, 'square', 0.1, 60); },
+        playMonsterAttack() { this.playNoise(0.1, 0.08, 600); },
+        playMonsterDeath() { this.playTone(200, 0.3, 'sawtooth', 0.12, 30); },
+        playHeal() { this.playTone(400, 0.2, 'sine', 0.15); setTimeout(() => this.playTone(600, 0.3, 'sine', 0.12), 100); },
+        playMapChange() { this.playTone(300, 0.4, 'sine', 0.15, 500); },
+        playSkillReady() { this.playTone(880, 0.15, 'sine', 0.1); }
+    };
+    </script></body>
 </html>
